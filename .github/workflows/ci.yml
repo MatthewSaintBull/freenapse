@@ -59,3 +59,19 @@ jobs:
             freenapse.exe
             freenapse.exe.sha256
           generate_release_notes: true
+
+      # freenapse.app rebuilds its changelog and download button from the
+      # releases. It also rebuilds once a day on its own, so this step only
+      # makes the site current within minutes instead of hours. It needs a
+      # fine-grained token with "Contents: read and write" on freenapse-web,
+      # stored as the FREENAPSE_WEB_TOKEN secret; without it the step is skipped.
+      - name: Tell freenapse.app to rebuild
+        env:
+          WEB_TOKEN: ${{ secrets.FREENAPSE_WEB_TOKEN }}
+        if: ${{ env.WEB_TOKEN != '' }}
+        run: >
+          curl -fsS -X POST
+          -H "Accept: application/vnd.github+json"
+          -H "Authorization: Bearer $WEB_TOKEN"
+          https://api.github.com/repos/MatthewSaintBull/freenapse-web/dispatches
+          -d '{"event_type":"release"}'
