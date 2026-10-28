@@ -5,8 +5,12 @@
 
 # freenapse
 
+[![CI](https://github.com/MatthewSaintBull/freenapse/actions/workflows/ci.yml/badge.svg)](https://github.com/MatthewSaintBull/freenapse/actions/workflows/ci.yml)
+
 A tiny Rust replacement for Razer Synapse, built for the **Razer Viper V3 Pro**
 (wired, or through the HyperSpeed / HyperPolling dongle).
+
+![The Customize page: button assignment with the mouse drawing](assets/screenshot-customize.png)
 
 Synapse 4 on this machine runs as 11 Electron processes using about 1.5 GB of RAM
 and burns CPU while gaming. freenapse is one small native executable with no
@@ -63,6 +67,8 @@ time) and the settings window opens: the same controls as Synapse's mouse
 page in a Steam / Xbox-app style layout (navigation pane with the device
 card, a page header, flat cards of settings rows in the Fluent 2 type ramp), drawn with
 plain GDI inside the same 1 MB executable.
+
+![The Performance page: DPI stages, Dynamic Sensitivity and polling rate](assets/screenshot-performance.png)
 
 * **Customize**: pick a layer (Normal, Hypershift, or one per game), click a button in the list or on the mouse drawing, pick a function (default, mouse button or double-click, keyboard key with modifiers, DPI stage/cycle, media key, system sleep / power / wake, macro with its playback option, Hypershift, disabled). Mouse and keyboard functions have a Turbo toggle with a repeat rate. The MACROS section below records new macros (Stop or Esc ends the recording), renames and deletes them, and shows the macro memory left in the mouse.
 * **Performance**: DPI stages (enable, count, value per stage via slider or typed, active stage, independent X and Y), Dynamic Sensitivity with the three presets and a drag-the-points curve editor, polling rate, sensor rotation.
