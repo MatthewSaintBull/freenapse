@@ -13,12 +13,13 @@ use freenapse::sensor::Tracking;
 use freenapse::{apply, config_path};
 
 const USAGE: &str = "\
-freenapse - lightweight Razer Viper V3 Pro control (replaces Razer Synapse)
+freenapse - lightweight Razer mouse control (replaces Razer Synapse); verified on the Viper V3 Pro
 
 The wireless mouse only answers while it is awake: keep moving it while running commands.
 
 USAGE:
   freenapse status                       battery, DPI, polling, sleep, sensor, dongle
+  freenapse probe                        what the mouse answers, raw, to paste into an issue for a new mouse
   freenapse apply                        write the config file to the mouse (onboard memory)
   freenapse config                       print the config file path (created from the mouse if missing)
   freenapse import                       overwrite the config file with the mouse's current settings
@@ -270,7 +271,7 @@ fn run(cmd: &str, args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         }
         "pair" | "pair-cancel" | "unpair" => {
             let yes = args.iter().any(|a| a == "--yes");
-            let pid = args.iter().find(|a| !a.starts_with("--")).map(|s| u16::from_str_radix(s.trim_start_matches("0x"), 16)).transpose()?.unwrap_or(device::PID_VIPER_V3_PRO_WIRELESS);
+            let pid = args.iter().find(|a| !a.starts_with("--")).map(|s| u16::from_str_radix(s.trim_start_matches("0x"), 16)).transpose()?.unwrap_or(mouse.spec().product_id);
             match cmd {
                 "pair" => {
                     let mode = mouse.start_pairing(pid)?;
@@ -344,6 +345,11 @@ fn run(cmd: &str, args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         }
+        "probe" => {
+            for line in freenapse::probe::run(&mouse) {
+                println!("{line}");
+            }
+        }
         "watch" => {
             let n: u32 = args.first().map(|s| s.parse()).transpose()?.unwrap_or(30);
             for _ in 0..n {
@@ -370,7 +376,14 @@ where
 }
 
 fn status(mouse: &Mouse) -> Result<(), Box<dyn std::error::Error>> {
-    println!("connection:   {}", if mouse.is_wireless() { "wireless (HyperSpeed dongle)" } else { "wired" });
+    let spec = mouse.spec();
+    let trust = match (spec.verified, mouse.writes_allowed()) {
+        (true, _) => "",
+        (false, true) => "  [unverified; writes allowed by [device] allow_unverified]",
+        (false, false) => "  [unverified: read-only until [device] allow_unverified = true]",
+    };
+    println!("device:       {} (product id 0x{:04x}){trust}", spec.name, spec.product_id);
+    println!("connection:   {}", if mouse.is_wireless() { "wireless (through the dongle)" } else { "wired" });
     if mouse.is_wireless() {
         if let Ok((a, b)) = mouse.dongle_firmware() {
             println!("dongle:       fw {a}.{b}  serial {}", mouse.dongle_serial().unwrap_or_default());
@@ -408,7 +421,7 @@ fn status(mouse: &Mouse) -> Result<(), Box<dyn std::error::Error>> {
     if let Ok((n, max)) = mouse.profiles() {
         println!("profiles:     {n} onboard (the mouse supports {max}), using profile {}", mouse.profile());
     }
-    if mouse.is_wireless() {
+    if spec.pairing {
         println!("dongle led:   {}", mouse.dongle_led_mode().map(|p| p.to_string()).unwrap_or_else(|e| e.to_string()));
     }
     Ok(())

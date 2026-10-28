@@ -20,7 +20,7 @@ use windows_sys::Win32::UI::Shell::*;
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
 use crate::config::Config;
-use crate::device::{Battery, DpiStages, Mouse, POLLING_RATES_WIRELESS};
+use crate::device::{Battery, DpiStages, Mouse, RATES_HYPERPOLLING};
 use crate::{apply, config_path, ui, user_active};
 
 const WM_TRAY: u32 = WM_APP + 1;
@@ -330,6 +330,11 @@ impl App {
         self.nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP | NIF_SHOWTIP;
     }
 
+    /// Polling rates the menu offers: the open mouse's, else the full HyperPolling list.
+    fn rates(&self) -> &'static [u16] {
+        self.mouse.as_ref().map(|m| m.spec().polling_rates).unwrap_or(&RATES_HYPERPOLLING)
+    }
+
     fn wanted_polling(&self) -> u16 {
         self.game_mode.as_deref().and_then(|g| self.config.game_by_key(g)).map(|g| g.polling).unwrap_or(self.config.polling.rate)
     }
@@ -402,7 +407,8 @@ impl App {
                 let b = r.battery;
                 if !b.charging && b.percent <= low && !self.notified_low {
                     self.notified_low = true;
-                    self.notify("Mouse battery low", &format!("Viper V3 Pro at {}%. Plug it in.", b.percent), true);
+                    let name = self.mouse.as_ref().map(|m| m.spec().name.to_string()).unwrap_or_else(|| "Mouse".into());
+                    self.notify("Mouse battery low", &format!("{name} at {}%. Plug it in.", b.percent), true);
                 }
                 if b.charging || b.percent > low + 5 {
                     self.notified_low = false;
@@ -502,7 +508,7 @@ impl App {
             AppendMenuW(menu, MF_STRING | checked, ID_STAGE_BASE + i, wide(&format!("DPI {x}")).as_ptr());
         }
         AppendMenuW(menu, MF_SEPARATOR, 0, ptr::null());
-        for (i, hz) in POLLING_RATES_WIRELESS.iter().enumerate() {
+        for (i, hz) in self.rates().iter().enumerate() {
             let checked = if Some(*hz) == self.polling { MF_CHECKED } else { 0 };
             AppendMenuW(menu, MF_STRING | checked, ID_POLL_BASE + i, wide(&format!("{hz} Hz")).as_ptr());
         }
@@ -563,8 +569,8 @@ impl App {
                     }
                 }
             }
-            id if (ID_POLL_BASE..ID_POLL_BASE + POLLING_RATES_WIRELESS.len()).contains(&id) => {
-                let hz = POLLING_RATES_WIRELESS[id - ID_POLL_BASE];
+            id if (ID_POLL_BASE..ID_POLL_BASE + self.rates().len()).contains(&id) => {
+                let hz = self.rates()[id - ID_POLL_BASE];
                 if let Some(mouse) = self.mouse.as_ref() {
                     match mouse.set_polling_rate(hz) {
                         Ok(()) => {

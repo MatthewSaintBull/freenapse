@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+- A device table (`src/device.rs`, `DeviceSpec`) drives what freenapse does per
+  product id: transaction id, polling command, polling rates, DPI maximum,
+  sensor tracking page, dongle pairing. The Viper V3 Pro rows carry exactly the
+  previous behaviour; the other rows take their facts from OpenRazer's device
+  list and are unverified.
+- Any Razer mouse with the 90-byte control report now opens. One that is not in
+  the table, or is there unverified, is read-only: `status` and `probe` work,
+  every write is refused with a message that says how to help. `[device]
+  allow_unverified = true` in the config lifts that at the owner's risk.
+- `freenapse probe`: every read the mouse answers, raw, as a code block to
+  paste into an issue so a table row can be written for a new mouse.
+- The settings window hides the Calibration page and the dongle pairing and
+  LED controls on mice where the table does not know them.
+- `FEATURES.md` lists the supported mice with who verified them;
+  `CONTRIBUTING.md` describes how to add one.
+
 ## 0.1.0 (2026-10-28)
 
 First release, for the Razer Viper V3 Pro on Windows 10/11, wired or through

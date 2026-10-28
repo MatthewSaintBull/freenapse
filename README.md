@@ -90,6 +90,7 @@ See [FEATURES.md](FEATURES.md) for the full Synapse feature map and the USB prot
 freenapse.exe               # double-click: tray icon (battery, DPI stage, polling rate, per-game profiles, macros)
 freenapse ui                # settings window (or click the tray icon)
 freenapse status            # see what the mouse currently has stored
+freenapse probe             # a mouse other than the Viper V3 Pro? paste this into an issue (see FEATURES.md, Supported mice)
 freenapse config            # creates the config file from the mouse's current settings; edit it
 freenapse apply             # write the config to the mouse
 freenapse autostart on      # start the tray at login

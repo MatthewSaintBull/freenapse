@@ -195,6 +195,33 @@ pub mod cmd {
     }
     pub fn get_polling_rate() -> Report { Report::new(TID_MOUSE, 0x00, 0xC0, 0x01) }
 
+    /// Classic polling rate command (mice without the extended one, and the Viper V3 Pro wired).
+    pub fn set_polling_rate_classic(code: u8) -> Report {
+        Report::new(TID_MOUSE, 0x00, 0x05, 0x01).with_args(&[code])
+    }
+    pub fn get_polling_rate_classic() -> Report { Report::new(TID_MOUSE, 0x00, 0x85, 0x01) }
+
+    /// Codes of the classic command: 1000 Hz = 0x01, 500 = 0x02, 250 = 0x04, 125 = 0x08 (OpenRazer).
+    pub fn polling_code_classic(hz: u16) -> Option<u8> {
+        Some(match hz {
+            1000 => 0x01,
+            500 => 0x02,
+            250 => 0x04,
+            125 => 0x08,
+            _ => return None,
+        })
+    }
+
+    pub fn polling_from_code_classic(code: u8) -> Option<u16> {
+        Some(match code {
+            0x01 => 1000,
+            0x02 => 500,
+            0x04 => 250,
+            0x08 => 125,
+            _ => return None,
+        })
+    }
+
     /// HyperPolling dongle indicator LED mode (1..=3).
     pub fn set_dongle_led_mode(mode: u8) -> Report {
         Report::new(TID_DONGLE, 0x07, 0x10, 0x01).with_args(&[mode.clamp(1, 3)])
@@ -324,6 +351,14 @@ mod tests {
             assert_eq!(cmd::polling_from_code(cmd::polling_code(hz)), Some(hz));
         }
         assert_eq!(cmd::polling_from_code(0x33), None);
+        for hz in [125u16, 250, 500, 1000] {
+            assert_eq!(cmd::polling_from_code_classic(cmd::polling_code_classic(hz).unwrap()), Some(hz));
+        }
+        assert_eq!(cmd::polling_code_classic(2000), None);
+        let r = cmd::set_polling_rate_classic(0x02);
+        assert_eq!((r.command_class, r.command_id, r.data_size, r.arguments[0]), (0x00, 0x05, 0x01, 0x02));
+        let g = cmd::get_polling_rate_classic();
+        assert_eq!((g.command_class, g.command_id, g.data_size), (0x00, 0x85, 0x01));
     }
 
     #[test]

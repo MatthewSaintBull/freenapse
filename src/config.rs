@@ -14,6 +14,13 @@ pub const DEFAULT_TOML: &str = r#"# freenapse configuration for the Razer Viper 
 # Everything here is written to the mouse's onboard memory, so it also
 # applies on other computers without any software running.
 
+[device]
+# freenapse writes only to mice an owner has verified (today: the Viper V3 Pro). Any other
+# Razer mouse opens read-only: `freenapse status` and `freenapse probe` work, writes are refused.
+# Set this to true to write to such a mouse anyway, at your own risk, after checking the probe
+# output; please open an issue with that output so the mouse can be added to the device table.
+allow_unverified = false
+
 [dpi]
 # Up to 5 stages, cycled with the button under the mouse. Range 100..35000.
 stages = [400, 800, 1600, 3200, 6400]
@@ -112,6 +119,7 @@ notify_percent = 15
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct Config {
+    pub device: DeviceConfig,
     pub dpi: DpiConfig,
     pub polling: PollingConfig,
     pub power: PowerConfig,
@@ -261,6 +269,14 @@ pub struct DongleConfig {
     pub led: u8,
 }
 
+/// Which mice freenapse may write to.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(default)]
+pub struct DeviceConfig {
+    /// Write to a mouse that is not in the device table, or is there unverified.
+    pub allow_unverified: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct TrayConfig {
@@ -271,6 +287,7 @@ pub struct TrayConfig {
 impl Default for Config {
     fn default() -> Self {
         Config {
+            device: DeviceConfig::default(),
             dpi: DpiConfig::default(),
             polling: PollingConfig::default(),
             power: PowerConfig::default(),
@@ -345,7 +362,23 @@ impl Config {
         Ok(cfg)
     }
 
+    /// `[device] allow_unverified` of the file at `path`: false when the file is
+    /// missing or unreadable. Read before a mouse is opened, so the rest of the
+    /// file is not validated here.
+    pub fn allow_unverified_at(path: &Path) -> bool {
+        std::fs::read_to_string(path).ok().and_then(|t| toml::from_str::<Config>(&t).ok()).map(|c| c.device.allow_unverified).unwrap_or(false)
+    }
+
+    /// Validate against the Viper V3 Pro's ranges (what the file is checked
+    /// against when no mouse is open). With a mouse open use [`Config::validate_for`].
     pub fn validate(&self) -> Result<(), String> {
+        self.validate_for(crate::device::DeviceSpec::viper_v3_pro())
+    }
+
+    /// Validate with the DPI range and polling rates of this mouse. The in-game
+    /// rates only need a code the protocol knows: they are checked against the
+    /// mouse when the tray app switches to them.
+    pub fn validate_for(&self, spec: &crate::device::DeviceSpec) -> Result<(), String> {
         if self.dpi.stages.is_empty() || self.dpi.stages.len() > 5 {
             return Err("dpi.stages must have 1 to 5 entries".into());
         }
@@ -356,16 +389,18 @@ impl Config {
             return Err("dpi.y_stages must be empty or have one value per stage".into());
         }
         for d in self.dpi.stages.iter().chain(&self.dpi.y_stages) {
-            if !(crate::device::DPI_MIN..=crate::device::DPI_MAX).contains(d) {
-                return Err(format!("dpi {d} is outside 100..35000"));
+            if !spec.dpi_ok(*d) {
+                return Err(format!("dpi {d} is outside {}..{}", crate::device::DPI_MIN, spec.dpi_max));
             }
         }
         self.acceleration.mode()?;
         crate::accel::validate_points(&self.acceleration.curve).map_err(|e| format!("[acceleration] {e}"))?;
-        for r in [self.polling.rate, self.polling.game_rate] {
-            if !crate::device::POLLING_RATES_WIRELESS.contains(&r) {
-                return Err(format!("polling rate {r} is not one of 125/250/500/1000/2000/4000/8000"));
-            }
+        if !spec.polling_rates.contains(&self.polling.rate) {
+            return Err(format!("polling rate {} is not one of {}", self.polling.rate, spec.rates_text()));
+        }
+        let any_rate = crate::device::RATES_HYPERPOLLING;
+        if !any_rate.contains(&self.polling.game_rate) {
+            return Err(format!("polling rate {} is not one of 125/250/500/1000/2000/4000/8000", self.polling.game_rate));
         }
         if !(60..=900).contains(&self.power.idle_seconds) {
             return Err("power.idle_seconds must be 60..900".into());
@@ -423,7 +458,7 @@ impl Config {
                 }
             }
             if let Some(p) = g.polling {
-                if !crate::device::POLLING_RATES_WIRELESS.contains(&p) {
+                if !any_rate.contains(&p) {
                     return Err(format!("[[games]] {}: polling rate {p} is not one of 125/250/500/1000/2000/4000/8000", g.label()));
                 }
             }
@@ -560,6 +595,7 @@ impl Config {
     pub fn render(&self) -> String {
         let s = &self.sensor;
         let values: &[(&str, &str, String)] = &[
+            ("[device]", "allow_unverified", self.device.allow_unverified.to_string()),
             ("[dpi]", "stages", format!("{:?}", self.dpi.stages)),
             ("[dpi]", "active", self.dpi.active.to_string()),
             ("[dpi]", "y_stages", format!("{:?}", self.dpi.y_stages)),
@@ -957,6 +993,58 @@ mod tests {
         c.validate().unwrap();
         assert_eq!(c.dpi.stages.len(), 5);
         assert_eq!(c.polling.rate, 1000);
+        assert!(!c.device.allow_unverified);
+    }
+
+    #[test]
+    fn device_section() {
+        let parsed: Config = toml::from_str("[device]\nallow_unverified = true\n").unwrap();
+        assert!(parsed.device.allow_unverified);
+        let text = parsed.render();
+        assert!(text.contains("allow_unverified = true"), "{text}");
+        let back: Config = toml::from_str(&text).unwrap();
+        assert_eq!(back, parsed);
+        // The flag is read without the rest of the file having to validate.
+        let dir = std::env::temp_dir().join(format!("freenapse-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("config.toml");
+        std::fs::write(&p, "[device]\nallow_unverified = true\n[dpi]\nstages = []\n").unwrap();
+        assert!(Config::allow_unverified_at(&p));
+        assert!(Config::load(&p).is_err());
+        std::fs::write(&p, "[dpi]\nstages = [800]\nactive = 1\n").unwrap();
+        assert!(!Config::allow_unverified_at(&p));
+        assert!(!Config::allow_unverified_at(&dir.join("missing.toml")));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn validate_against_a_spec() {
+        use crate::device::DeviceSpec;
+        let mut c = Config::default();
+        c.dpi.stages = vec![400, 35000];
+        c.dpi.active = 1;
+        c.validate().unwrap();
+        let wired = DeviceSpec::lookup(0x00C0);
+        c.validate_for(&wired).unwrap();
+        // A smaller sensor refuses the top stage, with its own maximum in the message.
+        let small = DeviceSpec::lookup(0x00A6);
+        let e = c.validate_for(&small).unwrap_err();
+        assert!(e.contains("35000") && e.contains("30000"), "{e}");
+        // The classic polling command has no 2000 Hz; the in-game rate is not held to the mouse's list.
+        c.dpi.stages = vec![400];
+        c.polling.rate = 2000;
+        c.validate().unwrap();
+        let e = c.validate_for(&wired).unwrap_err();
+        assert!(e.contains("2000") && e.contains("125/500/1000"), "{e}");
+        c.polling.rate = 1000;
+        c.polling.game_rate = 8000;
+        c.validate_for(&wired).unwrap();
+        c.polling.game_rate = 3000;
+        assert!(c.validate_for(&wired).is_err());
+        // The unknown fallback is held to its own, conservative ranges.
+        c.polling.game_rate = 8000;
+        c.dpi.stages = vec![30001];
+        assert!(c.validate_for(&DeviceSpec::unknown(0x0123)).is_err());
     }
 
     #[test]

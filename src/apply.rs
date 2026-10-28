@@ -36,19 +36,26 @@ pub fn import(mouse: &Mouse) -> Result<Config> {
     }
 
     // Sensor: Smart Tracking can be read back; the asymmetric levels cannot, so
-    // that mode is kept as is until the user picks values in the window.
-    let s = mouse.sensor()?;
+    // that mode is kept as is until the user picks values in the window. On a
+    // mouse whose sensor page is not known, a failed read means "keep" too.
+    let s = match mouse.sensor() {
+        Ok(s) => Some(s),
+        Err(e) if mouse.spec().sensor_tracking => return Err(e),
+        Err(_) => None,
+    };
     let sc = &mut cfg.sensor;
     sc.tracking = "keep".into();
-    if s.mode == sensor::LIFT_MODE_SMART && !s.use_calibration {
-        sc.tracking = "smart".into();
-        sc.lift = (s.height + 1).clamp(1, 3);
+    if let Some(s) = s {
+        if s.mode == sensor::LIFT_MODE_SMART && !s.use_calibration {
+            sc.tracking = "smart".into();
+            sc.lift = (s.height + 1).clamp(1, 3);
+        }
     }
     if let Ok((on, deg)) = mouse.rotation() {
         sc.rotation = if on { deg.clamp(-30, 30) } else { 0 };
     }
 
-    if mouse.is_wireless() {
+    if mouse.spec().pairing {
         if let Ok(led) = mouse.dongle_led_mode() {
             if (1..=3).contains(&led) {
                 cfg.dongle.led = led;
@@ -124,6 +131,8 @@ fn accel_differs(mouse: &Mouse, cfg: &Config) -> Result<bool> {
 /// the normal and the in-game rate. Returns a line per change made.
 pub fn apply(mouse: &Mouse, cfg: &Config, polling_rate: u16) -> Result<Vec<String>> {
     let mut changes = Vec::new();
+    let spec = mouse.spec();
+    cfg.validate_for(spec).map_err(HidError::Invalid)?;
 
     // Everything profile-bound below (buttons, acceleration) goes to this profile.
     if mouse.profile() != cfg.profile.active {
@@ -160,7 +169,8 @@ pub fn apply(mouse: &Mouse, cfg: &Config, polling_rate: u16) -> Result<Vec<Strin
     }
 
     let tracking = cfg.tracking().map_err(|_| HidError::Unsupported("invalid [sensor] section"))?;
-    if let Some(tracking) = tracking {
+    // The tracking page is only written where it is known to apply (src/sensor.rs).
+    if let Some(tracking) = tracking.filter(|_| spec.sensor_tracking) {
         let plan = tracking.plan().map_err(|_| HidError::Unsupported("invalid [sensor] section"))?;
         let cur = mouse.sensor()?;
         // The asymmetric levels cannot be read back, so that mode is always rewritten.
@@ -179,13 +189,19 @@ pub fn apply(mouse: &Mouse, cfg: &Config, polling_rate: u16) -> Result<Vec<Strin
     }
 
     let want_rot = cfg.sensor.rotation;
-    let (rot_on, rot_deg) = mouse.rotation()?;
-    if rot_on != (want_rot != 0) || (rot_on && rot_deg != want_rot) {
-        mouse.set_rotation(want_rot)?;
-        changes.push(format!("rotation -> {want_rot} deg"));
+    match mouse.rotation() {
+        Ok((rot_on, rot_deg)) => {
+            if rot_on != (want_rot != 0) || (rot_on && rot_deg != want_rot) {
+                mouse.set_rotation(want_rot)?;
+                changes.push(format!("rotation -> {want_rot} deg"));
+            }
+        }
+        Err(e) if spec.sensor_tracking => return Err(e),
+        // Angle tune is part of the sensor page: left alone where that page is unknown.
+        Err(_) => {}
     }
 
-    if mouse.is_wireless() && mouse.dongle_led_mode().ok() != Some(cfg.dongle.led) {
+    if spec.pairing && mouse.dongle_led_mode().ok() != Some(cfg.dongle.led) {
         mouse.set_dongle_led_mode(cfg.dongle.led)?;
         changes.push(format!("dongle led -> {}", cfg.dongle.led));
     }

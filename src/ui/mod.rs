@@ -34,7 +34,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
 use crate::accel;
 use crate::config::{Config, GameConfig, MacroConfig, macro_spec, parse_button};
-use crate::device::{BUTTONS, Battery, ButtonFunction, MacroStorage, Mouse, POLLING_RATES_WIRED, POLLING_RATES_WIRELESS, PID_VIPER_V3_PRO_WIRELESS, PairedDevice};
+use crate::device::{BUTTONS, Battery, ButtonFunction, DeviceSpec, MacroStorage, Mouse, PairedDevice};
 use crate::hid::HidError;
 use crate::library::{self, Game};
 use crate::macros::{self, Playback};
@@ -423,6 +423,8 @@ pub struct Ui {
     pub(crate) dongle_fw: Option<(u8, u8)>,
     pub(crate) serial: Option<String>,
     pub(crate) wireless: bool,
+    /// What the device table says about the open mouse (the Viper V3 Pro until one is open).
+    pub(crate) spec: DeviceSpec,
     pub(crate) asleep: bool,
     widgets: Vec<Widget>,
     edits: Vec<EditCtl>,
@@ -583,6 +585,7 @@ unsafe fn create(owner: HWND) -> HWND {
         dongle_fw: None,
         serial: None,
         wireless: true,
+        spec: DeviceSpec::default(),
         asleep: false,
         widgets: Vec::new(),
         edits: Vec::new(),
@@ -794,7 +797,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
                 // Runs after the window is gone; its result has nowhere to go and is dropped.
                 ui.io(|dev| {
                     if let Ok(m) = dev.mouse() {
-                        let _ = m.cancel_pairing(PID_VIPER_V3_PRO_WIRELESS);
+                        let _ = m.cancel_pairing(m.spec().product_id);
                     }
                     Box::new(|_| {})
                 });
@@ -918,10 +921,11 @@ impl Ui {
         self.io(move |dev| {
             let res = dev.mouse().and_then(|m| m.battery());
             dev.check(&res);
-            let wireless = dev.mouse.as_ref().map(|m| m.is_wireless());
+            let spec = dev.mouse.as_ref().map(|m| m.spec().clone());
             Box::new(move |ui: &mut Ui| {
-                if let Some(w) = wireless {
-                    ui.wireless = w;
+                if let Some(spec) = spec {
+                    ui.wireless = spec.wireless;
+                    ui.spec = spec;
                 }
                 let awake = res.is_ok();
                 match res {
@@ -1021,7 +1025,7 @@ impl Ui {
                 self.pairing_since = None;
                 self.io(|dev| {
                     if let Ok(m) = dev.mouse() {
-                        let _ = m.cancel_pairing(PID_VIPER_V3_PRO_WIRELESS);
+                        let _ = m.cancel_pairing(m.spec().product_id);
                     }
                     Box::new(|_| {})
                 });
@@ -1092,6 +1096,9 @@ impl Ui {
         let nav_h = self.s(NAV_H);
         let mut y = self.s(80);
         for (i, p) in Page::TABS.iter().enumerate() {
+            if *p == Page::Calibration && !self.spec.sensor_tracking {
+                continue; // the tracking page of src/sensor.rs is not known to apply to this mouse
+            }
             self.widgets.push(Widget {
                 id: Id::Tab(i),
                 rect: rect(nav_x, y, nav_w, nav_h),
@@ -1321,7 +1328,8 @@ impl Ui {
         let cr = rect(s(NAV_PAD), h - s(FOOTER_H) - ch - s(4), sw - s(2 * NAV_PAD), ch);
         card(dc, &cr, s(4));
         let online = self.connected && !self.asleep;
-        text(dc, &rect(cr.left + s(16), cr.top + s(12), cr.right - cr.left - s(52), s(20)), "Viper V3 Pro", self.fonts.bold, TEXT, DT_ROW);
+        let model = self.spec.name.trim_start_matches("Razer ").split(" (").next().unwrap_or("Mouse").to_string();
+        text(dc, &rect(cr.left + s(16), cr.top + s(12), cr.right - cr.left - s(52), s(20)), &model, self.fonts.bold, TEXT, DT_ROW);
         let (licon, lcol) = match (self.connected, self.asleep, self.wireless) {
             (false, _, _) => (Icon::Warning, DIM),
             (true, true, _) => (Icon::Wifi, WARN),
@@ -2580,7 +2588,7 @@ impl Ui {
                 Write::None
             }
             Id::GamePolling => {
-                let rates: &[u16] = if self.wireless { &POLLING_RATES_WIRELESS } else { &POLLING_RATES_WIRED };
+                let rates: &[u16] = self.spec.polling_rates;
                 if let Some(g) = self.cfg.games.get_mut(self.sel_game) {
                     g.polling = if v == 0 { None } else { rates.get(v as usize - 1).copied() };
                 }
@@ -2608,12 +2616,12 @@ impl Ui {
                 Write::Stages
             }
             Id::Polling => {
-                let rates: &[u16] = if self.wireless { &POLLING_RATES_WIRELESS } else { &POLLING_RATES_WIRED };
+                let rates: &[u16] = self.spec.polling_rates;
                 self.cfg.polling.rate = rates[(v as usize).min(rates.len() - 1)];
                 Write::Polling
             }
             Id::GameRate => {
-                let rates: &[u16] = if self.wireless { &POLLING_RATES_WIRELESS } else { &POLLING_RATES_WIRED };
+                let rates: &[u16] = self.spec.polling_rates;
                 self.cfg.polling.game_rate = rates[(v as usize).min(rates.len() - 1)];
                 Write::None
             }
@@ -2911,10 +2919,10 @@ impl Ui {
                 }
                 Write::Pair(act) => match act {
                     PairAct::Start => {
-                        m.start_pairing(PID_VIPER_V3_PRO_WIRELESS)?;
+                        m.start_pairing(m.spec().product_id)?;
                     }
-                    PairAct::Cancel => m.cancel_pairing(PID_VIPER_V3_PRO_WIRELESS)?,
-                    PairAct::Unpair => m.unpair(PID_VIPER_V3_PRO_WIRELESS)?,
+                    PairAct::Cancel => m.cancel_pairing(m.spec().product_id)?,
+                    PairAct::Unpair => m.unpair(m.spec().product_id)?,
                     PairAct::Auto(on) => m.set_auto_pairing(on)?,
                 },
             }

@@ -10,7 +10,7 @@ use super::draw::*;
 use super::{FontKind, Id, Kind, Layer, Page, TileArt, TileItem, Ui, Widget};
 use crate::accel::Mode;
 use crate::config::{MacroConfig, parse_button};
-use crate::device::{BUTTONS, POLLING_RATES_WIRED, POLLING_RATES_WIRELESS, TURBO_MAX, TURBO_MIN};
+use crate::device::{BUTTONS, TURBO_MAX, TURBO_MIN};
 use crate::macros::{self, Playback};
 
 /// Card padding, the label column of a settings row, and the row heights (DESIGN.md 3.3, 4.6).
@@ -460,7 +460,7 @@ fn performance(ui: &Ui, f: &mut Form) {
     }
 
     f.section_icon("Polling rate", Some(Icon::Bolt));
-    let rates: &[u16] = if ui.wireless { &POLLING_RATES_WIRELESS } else { &POLLING_RATES_WIRED };
+    let rates: &[u16] = ui.spec.polling_rates;
     let sel = rates.iter().position(|r| *r == cfg.polling.rate).unwrap_or(0);
     f.ticks("Polling rate (Hz)", "Reports per second. 4000 and 8000 need the HyperPolling dongle and use more battery", &hz_labels(rates), sel, Id::Polling);
 
@@ -506,7 +506,7 @@ fn badge_of(source: Option<&str>) -> &'static str {
 
 fn games(ui: &Ui, f: &mut Form) {
     let cfg = &ui.cfg;
-    let rates: &[u16] = if ui.wireless { &POLLING_RATES_WIRELESS } else { &POLLING_RATES_WIRED };
+    let rates: &[u16] = ui.spec.polling_rates;
 
     f.section_icon("Game profiles", Some(Icon::Game));
     if cfg.games.is_empty() {
@@ -643,7 +643,7 @@ fn power(ui: &Ui, f: &mut Form) {
         f.warning("Low power mode is not supported at polling rates of 2000 Hz and above. Lower the polling rate to use it.");
     }
 
-    if ui.wireless {
+    if ui.wireless && ui.spec.pairing {
         f.section_icon("HyperPolling wireless dongle", Some(Icon::Wifi));
         let leds = ["Battery status", "Polling rate", "Off"].map(String::from);
         f.chips("Indicator LED", "What the light on the dongle shows", &leds, Some((cfg.dongle.led as usize).clamp(1, 3) - 1), Id::DongleLed);
@@ -976,7 +976,7 @@ fn app(ui: &Ui, f: &mut Form) {
         f.note(&format!("The mouse holds {stored} of {max} profiles. Selecting an empty slot creates it and writes this config to it."));
     }
 
-    if ui.wireless {
+    if ui.wireless && ui.spec.pairing {
         f.section_icon("Dongle pairing", Some(Icon::Link));
         match &ui.paired {
             Some(list) if !list.is_empty() => {
@@ -1008,7 +1008,16 @@ fn app(ui: &Ui, f: &mut Form) {
     }
 
     f.section_icon("Device", Some(Icon::Info));
-    f.info("Mouse", if ui.wireless { "Razer Viper V3 Pro via HyperSpeed / HyperPolling dongle" } else { "Razer Viper V3 Pro, wired" });
+    let model = ui.spec.name.split(" (").next().unwrap_or(&ui.spec.name);
+    let link = if ui.wireless { "via its wireless dongle" } else { "wired" };
+    let trust = if ui.spec.verified {
+        ""
+    } else if ui.cfg.device.allow_unverified {
+        "  ·  unverified, writes allowed by [device] allow_unverified"
+    } else {
+        "  ·  unverified: read-only until [device] allow_unverified is set"
+    };
+    f.info("Mouse", &format!("{model}, {link} (product id 0x{:04x}){trust}", ui.spec.product_id));
     f.info("Mouse firmware", &ui.fw.map(|(a, b)| format!("{a}.{b}")).unwrap_or_else(|| "-".into()));
     if ui.wireless {
         f.info("Dongle firmware", &ui.dongle_fw.map(|(a, b)| format!("{a}.{b}")).unwrap_or_else(|| "-".into()));

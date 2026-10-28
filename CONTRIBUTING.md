@@ -39,6 +39,31 @@ By opening a pull request you agree that your contribution is licensed under
 the MIT License of this repository, with no other terms. If you are not able
 to grant that, please do not submit.
 
+## Adding a mouse
+
+freenapse only writes to mice in the device table of `src/device.rs` that an
+owner has verified. Any other Razer mouse opens read-only, so the first step
+costs nothing:
+
+1. Run `freenapse probe` with the mouse awake (keep moving it) and paste the
+   whole output, which is already a code block, into a new issue. It shows the
+   product id, which transaction id answered, firmware and serial, battery,
+   DPI and stages, which of the two polling commands answered, the profile and
+   macro-memory answers and the sensor registers, each with its raw status and
+   argument bytes. Say which mouse and dongle it is and whether it was wired.
+2. From that, a `DeviceSpec` row is written: product id, name, wireless flag,
+   transaction id, polling command and rates, DPI maximum (OpenRazer's device
+   list is a fine source for the maximum and the ids; take facts from it, not
+   code), whether the Focus Pro tracking page of `src/sensor.rs` applies, and
+   whether dongle pairing applies. New rows start with `verified false`.
+3. With the row in place, the owner sets `[device] allow_unverified = true`,
+   runs `freenapse import`, `freenapse apply`, `freenapse status` and the
+   window, and reports what worked and what the mouse refused. Every write is
+   read back, so a wrong row shows up as an error, not as silent damage; a
+   setting that went wrong is put back with Synapse or the previous config.
+4. Once the owner confirms, the row becomes `verified true` and the mouse
+   joins the table in `FEATURES.md` with their name in the verified-by column.
+
 ## Pull requests
 
 * One change per pull request, with the `FEATURES.md` / `ROADMAP.md` rows it

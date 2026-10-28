@@ -27,6 +27,10 @@ pub enum HidError {
     NoResponse,
     /// The command only makes sense on the wireless dongle / only wired.
     Unsupported(&'static str),
+    /// A write to a mouse nobody has verified yet (see `DeviceSpec::write_refusal`).
+    Unverified(String),
+    /// A value outside what this mouse accepts.
+    Invalid(String),
 }
 
 impl fmt::Display for HidError {
@@ -41,6 +45,7 @@ impl fmt::Display for HidError {
             HidError::BadStatus(b) => write!(f, "device returned unknown status 0x{b:02x}"),
             HidError::NoResponse => write!(f, "no response matched the request"),
             HidError::Unsupported(what) => write!(f, "{what}"),
+            HidError::Unverified(why) | HidError::Invalid(why) => write!(f, "{why}"),
         }
     }
 }
@@ -176,6 +181,25 @@ impl HidDevice {
             }
         }
         Err(HidError::NotFound)
+    }
+
+    /// The first HID collection of this vendor that `accept` approves of, for
+    /// devices that are not in the product table. Collections whose usage is a
+    /// mouse (page 1, usage 2) are tried first.
+    pub fn open_control_any(vendor_id: u16, accept: impl Fn(&DeviceInfo) -> bool) -> Result<HidDevice> {
+        let needle = format!("vid_{vendor_id:04x}");
+        let mut fallback = None;
+        for path in interface_paths(&needle) {
+            let Ok(dev) = HidDevice::open_path(&path) else { continue };
+            if !accept(&dev.info) {
+                continue;
+            }
+            if dev.info.usage_page == 1 && dev.info.usage == 2 {
+                return Ok(dev);
+            }
+            fallback.get_or_insert(dev);
+        }
+        fallback.ok_or(HidError::NotFound)
     }
 
     pub fn set_feature(&self, buf: &[u8; HID_BUF_LEN]) -> Result<()> {

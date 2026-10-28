@@ -35,6 +35,35 @@ the moment it changes; while the mouse is asleep the change stays pending and
 is pushed when it wakes. Open it by clicking the tray icon, with
 `freenapse ui`, or by launching the tray executable a second time.
 
+## Supported mice
+
+The device table in `src/device.rs` decides how a product id is addressed and
+what it accepts. Only verified rows are written to; the others are read-only
+until an owner confirms them (`CONTRIBUTING.md`, "Adding a mouse"). Facts for
+the unverified rows come from OpenRazer's device list.
+
+| Mouse | Product id | Transaction id | Polling command | Rates (Hz) | DPI max | Tracking page | Dongle pairing | Verified by |
+|---|---|---|---|---|---|---|---|---|
+| Viper V3 Pro, wired | 0x00C0 | 0x1f | classic `00/05` | 125, 500, 1000 | 35000 | ✅ | — | the author |
+| Viper V3 Pro, HyperSpeed / HyperPolling dongle | 0x00C1 | 0x1f | HyperPolling `00/40` | 125 .. 8000 | 35000 | ✅ | ✅ | the author |
+| HyperPolling wireless dongle (standalone) | 0x00B3 | 0x1f | HyperPolling | 125 .. 8000 | 30000 | ❓ | ✅ | nobody yet |
+| DeathAdder V4 Pro, wired / wireless | 0x00BE / 0x00BF | 0x1f | HyperPolling | 125 .. 8000 | 45000 | ❓ | wireless | nobody yet |
+| DeathAdder V3 Pro, wired / wireless | 0x00B6 / 0x00B7 | 0x1f | classic | 125, 500, 1000 | 35000 | ❓ | — | nobody yet |
+| DeathAdder V3 (wired, 8K) | 0x00B2 | 0x1f | HyperPolling | 125 .. 8000 | 30000 | ❓ | — | nobody yet |
+| Viper V2 Pro, wired / wireless | 0x00A5 / 0x00A6 | 0x1f | classic | 125, 500, 1000 | 30000 | ❓ | — | nobody yet |
+| Viper V3 HyperSpeed | 0x00B8 | 0x1f | classic | 125, 500, 1000 | 30000 | ❓ | — | nobody yet |
+| Viper Mini SE, wired / wireless | 0x009E / 0x009F | 0x1f | HyperPolling | 125, 500, 1000 / 125 .. 8000 | 30000 | ❓ | wireless | nobody yet |
+| Viper 8KHz | 0x0091 | 0xff | HyperPolling | 125, 500 .. 8000 | 20000 | ❓ | — | nobody yet |
+| Cobra Pro, wired / wireless | 0x00AF / 0x00B0 | 0x1f | classic | 125, 500, 1000 | 30000 | ❓ | — | nobody yet |
+| Basilisk V3 Pro, wired / wireless | 0x00AA / 0x00AB | 0x1f | classic | 125, 500, 1000 | 30000 | ❓ | — | nobody yet |
+| Any other Razer mouse (vendor 0x1532, 90-byte control report) | — | 0x1f | classic | 125, 500, 1000 | 30000 | — | — | read-only; `freenapse probe` |
+
+"Tracking page" is the Focus Pro lift-off page of `src/sensor.rs`; ❓ means
+nobody has checked whether that mouse has it, so the Calibration page is
+hidden. `freenapse probe` prints what any of these answers; `[device]
+allow_unverified = true` in the config lets the owner of an unverified mouse
+write to it at their own risk.
+
 ## Feature map
 
 Legend: ✅ replicated, 🟡 partially / different approach, ❌ not replicated.

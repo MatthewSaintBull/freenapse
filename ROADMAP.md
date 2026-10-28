@@ -66,7 +66,7 @@ Legend: ✅ done and verified on the mouse, 🟡 partial, ❌ not yet, 🚫 out 
 | Game library | ✅ | installed games read from Steam, Epic Games, GOG, EA app, Battle.net, Riot, Ubisoft Connect, Rockstar and the Xbox app (local files and registry, no account); any other program through a file dialog |
 | Dongle pairing | ✅ | pair, cancel, unpair (confirmed twice) and auto-pairing on the gear page and in the CLI, Synapse's command bytes |
 | Bluetooth | 🚫 | the Viper V3 Pro has no Bluetooth |
-| Other Razer mice | ❌ | only the Viper V3 Pro product ids are recognised |
+| Other Razer mice | 🟡 | a device table (`FEATURES.md`, "Supported mice"): other mice open read-only, `freenapse probe` collects what an issue needs, `[device] allow_unverified` lets an owner write at their own risk |
 | Firmware update | 🚫 | use Razer's updater once if you need it |
 | Razer account, cloud profiles, telemetry, Chroma | 🚫 | by design; the Viper V3 Pro has no lighting |
 
@@ -93,7 +93,7 @@ All three are implemented. How each one turned out on the hardware:
 ### Later
 
 * Software bindings that need a resident input hook: launch a program, type text, Windows shortcuts.
-* A product table so other Razer mice that share this protocol can be added without code changes.
+* Verifying the device table rows beyond the Viper V3 Pro with their owners (`freenapse probe`, then `[device] allow_unverified`).
 * Bluetooth connection support for mice that have it.
 * Code-signing the executable.
 
@@ -101,6 +101,7 @@ All three are implemented. How each one turned out on the hardware:
 
 * Single portable executable: `freenapse.exe` is the tray app when started without arguments and the CLI otherwise; a `config.toml` next to it is used in preference to `%APPDATA%`. It carries its own icon.
 * Synapse uninstalled on the development PC: freenapse kept driving the mouse (status, apply, polling, buttons, tray) with no Razer software, service or startup entry left.
+* Device table and `freenapse probe`: any Razer mouse with the 90-byte control report opens, read-only until its table row is verified; the probe output is what an issue for a new mouse needs.
 * GAMES tab: the game list fills itself from Steam, Epic Games, GOG, EA app, Battle.net, Riot, Ubisoft Connect, Rockstar and the Xbox app (35 games found on the development PC: Steam, Epic, EA app, Battle.net, Xbox); click a game to create its profile, "Add a program..." for anything else. Profiles of launcher games match their whole install folder, so a game's launcher and 64-bit sub-binaries count too.
 
 ### Not planned

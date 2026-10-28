@@ -1,22 +1,185 @@
-//! High-level API for the Razer Viper V3 Pro (wired, or through the HyperSpeed dongle).
+//! High-level API for a Razer mouse (wired, or through its wireless dongle),
+//! driven by the [`DeviceSpec`] table below. The Viper V3 Pro is the one
+//! entry verified by the author; the others carry facts from OpenRazer's
+//! device list and refuse writes until an owner confirms them.
 
+use std::borrow::Cow;
 use std::thread;
 use std::time::Duration;
 
 use crate::hid::{HidDevice, HidError, Result};
-use crate::protocol::{Report, TID_DONGLE, TID_MOUSE, cmd};
+use crate::protocol::{HID_BUF_LEN, Report, TID_DONGLE, TID_MOUSE, cmd};
 use crate::accel;
 use crate::macros::{self, Playback};
 use crate::sensor::{self, SensorPlan};
 
 pub const VENDOR_RAZER: u16 = 0x1532;
-pub const PID_VIPER_V3_PRO_WIRED: u16 = 0x00C0;
-pub const PID_VIPER_V3_PRO_WIRELESS: u16 = 0x00C1;
 
 pub const DPI_MIN: u16 = 100;
-pub const DPI_MAX: u16 = 35000;
-pub const POLLING_RATES_WIRELESS: [u16; 7] = [125, 250, 500, 1000, 2000, 4000, 8000];
-pub const POLLING_RATES_WIRED: [u16; 3] = [125, 500, 1000];
+/// The rates the extended (HyperPolling) command can carry.
+pub const RATES_HYPERPOLLING: [u16; 7] = [125, 250, 500, 1000, 2000, 4000, 8000];
+/// The rates of the classic polling command.
+pub const RATES_CLASSIC: [u16; 3] = [125, 500, 1000];
+/// What the HyperPolling command carries on a wired link (the Viper Mini SE, per OpenRazer).
+const RATES_HYPERPOLLING_WIRED: [u16; 3] = [125, 500, 1000];
+/// The Viper 8KHz: the extended command without 250 Hz (OpenRazer).
+const RATES_VIPER_8K: [u16; 6] = [125, 500, 1000, 2000, 4000, 8000];
+
+/// Which polling-rate command a mouse answers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PollingStyle {
+    /// `00/40` set (sent twice, with argument 0x00 then 0x01), `00/C0` get; codes 8000=0x01 .. 125=0x40.
+    HyperPolling,
+    /// `00/05` set, `00/85` get; codes 1000=0x01, 500=0x02, 250=0x04, 125=0x08.
+    Classic,
+}
+
+/// What freenapse knows about one product id.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeviceSpec {
+    pub product_id: u16,
+    pub name: Cow<'static, str>,
+    /// The mouse talks through a wireless dongle (dongle firmware, serial and LED commands apply).
+    pub wireless: bool,
+    /// Transaction id that addresses the mouse (0x1f on current firmware; 0x3f and 0xff on older lines).
+    pub transaction_id: u8,
+    pub polling: PollingStyle,
+    pub polling_rates: &'static [u16],
+    pub dpi_max: u16,
+    /// The Focus Pro tracking page of `src/sensor.rs` (Smart Tracking / asymmetric cut-off) is known to apply.
+    pub sensor_tracking: bool,
+    /// Dongle pairing (and the dongle indicator LED) as Synapse offers them for the HyperPolling dongle.
+    pub pairing: bool,
+    /// An owner confirmed writes on this mouse. Until then every write is refused
+    /// unless the config has `[device] allow_unverified = true`.
+    pub verified: bool,
+}
+
+
+macro_rules! spec {
+    ($pid:expr, $name:expr, wireless $w:expr, tid $tid:expr, $style:ident, $rates:expr, dpi $dpi:expr, sensor $s:expr, pairing $p:expr, verified $v:expr) => {
+        DeviceSpec {
+            product_id: $pid,
+            name: Cow::Borrowed($name),
+            wireless: $w,
+            transaction_id: $tid,
+            polling: PollingStyle::$style,
+            polling_rates: &$rates,
+            dpi_max: $dpi,
+            sensor_tracking: $s,
+            pairing: $p,
+            verified: $v,
+        }
+    };
+}
+
+/// The device table. Row one is the mouse this project was written on; the
+/// other rows take product id, transaction id, polling command and DPI maximum
+/// from OpenRazer's device list (facts, no code) and stay unverified until an
+/// owner's `freenapse probe` output confirms them (see CONTRIBUTING.md).
+pub const DEVICES: &[DeviceSpec] = &[
+    spec!(0x00C0, "Razer Viper V3 Pro (wired)", wireless false, tid 0x1f, Classic, RATES_CLASSIC, dpi 35000, sensor true, pairing false, verified true),
+    spec!(0x00C1, "Razer Viper V3 Pro (wireless)", wireless true, tid 0x1f, HyperPolling, RATES_HYPERPOLLING, dpi 35000, sensor true, pairing true, verified true),
+    spec!(0x00B3, "Razer HyperPolling wireless dongle", wireless true, tid 0x1f, HyperPolling, RATES_HYPERPOLLING, dpi 30000, sensor false, pairing true, verified false),
+    spec!(0x00BE, "Razer DeathAdder V4 Pro (wired)", wireless false, tid 0x1f, HyperPolling, RATES_HYPERPOLLING, dpi 45000, sensor false, pairing false, verified false),
+    spec!(0x00BF, "Razer DeathAdder V4 Pro (wireless)", wireless true, tid 0x1f, HyperPolling, RATES_HYPERPOLLING, dpi 45000, sensor false, pairing true, verified false),
+    spec!(0x00B6, "Razer DeathAdder V3 Pro (wired)", wireless false, tid 0x1f, Classic, RATES_CLASSIC, dpi 35000, sensor false, pairing false, verified false),
+    spec!(0x00B7, "Razer DeathAdder V3 Pro (wireless)", wireless true, tid 0x1f, Classic, RATES_CLASSIC, dpi 35000, sensor false, pairing false, verified false),
+    spec!(0x00B2, "Razer DeathAdder V3", wireless false, tid 0x1f, HyperPolling, RATES_HYPERPOLLING, dpi 30000, sensor false, pairing false, verified false),
+    spec!(0x00A5, "Razer Viper V2 Pro (wired)", wireless false, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified false),
+    spec!(0x00A6, "Razer Viper V2 Pro (wireless)", wireless true, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified false),
+    spec!(0x00B8, "Razer Viper V3 HyperSpeed", wireless true, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified false),
+    spec!(0x009E, "Razer Viper Mini SE (wired)", wireless false, tid 0x1f, HyperPolling, RATES_HYPERPOLLING_WIRED, dpi 30000, sensor false, pairing false, verified false),
+    spec!(0x009F, "Razer Viper Mini SE (wireless)", wireless true, tid 0x1f, HyperPolling, RATES_HYPERPOLLING, dpi 30000, sensor false, pairing true, verified false),
+    spec!(0x0091, "Razer Viper 8KHz", wireless false, tid 0xff, HyperPolling, RATES_VIPER_8K, dpi 20000, sensor false, pairing false, verified false),
+    spec!(0x00AF, "Razer Cobra Pro (wired)", wireless false, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified false),
+    spec!(0x00B0, "Razer Cobra Pro (wireless)", wireless true, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified false),
+    spec!(0x00AA, "Razer Basilisk V3 Pro (wired)", wireless false, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified false),
+    spec!(0x00AB, "Razer Basilisk V3 Pro (wireless)", wireless true, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified false),
+];
+
+impl DeviceSpec {
+    /// The table row for a product id.
+    pub fn find(product_id: u16) -> Option<&'static DeviceSpec> {
+        DEVICES.iter().find(|d| d.product_id == product_id)
+    }
+
+    /// The table row, or the generic fallback for a Razer mouse that is not listed.
+    pub fn lookup(product_id: u16) -> DeviceSpec {
+        DeviceSpec::find(product_id).cloned().unwrap_or_else(|| DeviceSpec::unknown(product_id))
+    }
+
+    /// A Razer mouse that is not in the table: readable, writes refused, the
+    /// most common transaction id and the classic polling command.
+    pub fn unknown(product_id: u16) -> DeviceSpec {
+        DeviceSpec {
+            product_id,
+            name: Cow::Owned(format!("Razer mouse 0x{product_id:04x}")),
+            wireless: false,
+            transaction_id: TID_MOUSE,
+            polling: PollingStyle::Classic,
+            polling_rates: &RATES_CLASSIC,
+            dpi_max: 30000,
+            sensor_tracking: false,
+            pairing: false,
+            verified: false,
+        }
+    }
+
+    /// The mouse this project was written on, through its dongle: what the
+    /// config file is checked against when no mouse is open.
+    pub fn viper_v3_pro() -> &'static DeviceSpec {
+        &DEVICES[1]
+    }
+
+    /// True when the product id is in the table (verified or not).
+    pub fn is_known(&self) -> bool {
+        DeviceSpec::find(self.product_id).is_some()
+    }
+
+    pub fn dpi_ok(&self, dpi: u16) -> bool {
+        (DPI_MIN..=self.dpi_max).contains(&dpi)
+    }
+
+    /// "125/250/500/1000/2000/4000/8000", for error messages.
+    pub fn rates_text(&self) -> String {
+        self.polling_rates.iter().map(u16::to_string).collect::<Vec<_>>().join("/")
+    }
+
+    /// Why a write to this mouse is refused, or None when it may go ahead.
+    pub fn write_refusal(&self, allow_unverified: bool) -> Option<String> {
+        if self.verified || allow_unverified {
+            return None;
+        }
+        let why = if self.is_known() {
+            format!("the {} is in freenapse's device table but nobody has confirmed writes on it yet", self.name)
+        } else {
+            format!("the {} (product id 0x{:04x}) is not in freenapse's device table", self.name, self.product_id)
+        };
+        Some(format!(
+            "{why}, so it is read-only: run `freenapse probe` and open an issue at \
+             https://github.com/MatthewSaintBull/freenapse/issues with its output. \
+             To write to it anyway, at your own risk, set allow_unverified = true under [device] in the config file"
+        ))
+    }
+}
+
+impl Default for DeviceSpec {
+    fn default() -> Self {
+        DeviceSpec::viper_v3_pro().clone()
+    }
+}
+
+/// Refuse a write (command id with bit 7 clear) to a mouse nobody has verified.
+pub fn guard_write(spec: &DeviceSpec, allow_unverified: bool, req: &Report) -> Result<()> {
+    if req.command_id & 0x80 != 0 {
+        return Ok(());
+    }
+    match spec.write_refusal(allow_unverified) {
+        Some(why) => Err(HidError::Unverified(why)),
+        None => Ok(()),
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Battery {
@@ -225,6 +388,9 @@ pub fn button_code(name: &str) -> Option<u8> {
 
 pub struct Mouse {
     hid: HidDevice,
+    spec: DeviceSpec,
+    /// `[device] allow_unverified` of the config file: writes to an unverified mouse go ahead.
+    allow_unverified: bool,
     /// Onboard profile that button and acceleration commands address.
     profile: std::cell::Cell<u8>,
     /// Whether the mouse has macro memory (None until asked).
@@ -232,9 +398,43 @@ pub struct Mouse {
 }
 
 impl Mouse {
+    /// Open the first Razer mouse that is in the device table, or failing that
+    /// any Razer device with a 90-byte control report as [`DeviceSpec::unknown`].
+    /// Whether writes to an unverified mouse are allowed comes from the config file.
     pub fn open() -> Result<Mouse> {
-        let hid = HidDevice::open_control(VENDOR_RAZER, &[PID_VIPER_V3_PRO_WIRELESS, PID_VIPER_V3_PRO_WIRED])?;
-        Ok(Mouse { hid, profile: std::cell::Cell::new(1), macro_support: std::cell::Cell::new(None) })
+        Mouse::open_with(crate::config::Config::allow_unverified_at(&crate::config_path()))
+    }
+
+    pub fn open_with(allow_unverified: bool) -> Result<Mouse> {
+        let known: Vec<u16> = DEVICES.iter().map(|d| d.product_id).collect();
+        let hid = match HidDevice::open_control(VENDOR_RAZER, &known) {
+            Ok(h) => h,
+            Err(HidError::NotFound) => HidDevice::open_control_any(VENDOR_RAZER, |info| {
+                // Not a keyboard's control collection (usage page 1, usage 6).
+                info.feature_report_len as usize >= HID_BUF_LEN && !(info.usage_page == 1 && info.usage == 6)
+            })?,
+            Err(e) => return Err(e),
+        };
+        let spec = DeviceSpec::lookup(hid.info.product_id);
+        Ok(Mouse { hid, spec, allow_unverified, profile: std::cell::Cell::new(1), macro_support: std::cell::Cell::new(None) })
+    }
+
+    /// What the table says about this mouse.
+    pub fn spec(&self) -> &DeviceSpec {
+        &self.spec
+    }
+
+    /// False when every write would be refused (unverified mouse, flag not set).
+    pub fn writes_allowed(&self) -> bool {
+        self.spec.write_refusal(self.allow_unverified).is_none()
+    }
+
+    pub fn product_id(&self) -> u16 {
+        self.hid.info.product_id
+    }
+
+    pub fn vendor_id(&self) -> u16 {
+        self.hid.info.vendor_id
     }
 
     /// True when the mouse stores macros itself. The Viper V3 Pro answers
@@ -259,7 +459,7 @@ impl Mouse {
     }
 
     pub fn is_wireless(&self) -> bool {
-        self.hid.info.product_id == PID_VIPER_V3_PRO_WIRELESS
+        self.spec.wireless
     }
 
     pub fn path(&self) -> &str {
@@ -270,12 +470,31 @@ impl Mouse {
         self.hid.wait = Duration::from_millis(ms);
     }
 
+    /// Send a command. A request addressed to [`TID_MOUSE`] is re-addressed to
+    /// this mouse's transaction id (a no-op on the Viper V3 Pro); writes to an
+    /// unverified mouse are refused, see [`DeviceSpec::write_refusal`].
     pub fn raw(&self, req: &Report) -> Result<Report> {
+        if req.transaction_id == TID_MOUSE && self.spec.transaction_id != TID_MOUSE {
+            let mut r = req.clone();
+            r.transaction_id = self.spec.transaction_id;
+            return self.raw_as_is(&r);
+        }
+        self.raw_as_is(req)
+    }
+
+    /// Send a command with the transaction id it carries, no re-addressing.
+    pub fn raw_as_is(&self, req: &Report) -> Result<Report> {
+        guard_write(&self.spec, self.allow_unverified, req)?;
         self.hid.transact(req)
     }
 
     fn need_dongle(&self) -> Result<()> {
         if self.is_wireless() { Ok(()) } else { Err(HidError::Unsupported("only available through the wireless dongle")) }
+    }
+
+    fn need_pairing(&self) -> Result<()> {
+        self.need_dongle()?;
+        if self.spec.pairing { Ok(()) } else { Err(HidError::Unsupported("dongle pairing is not known to apply to this mouse")) }
     }
 
     // --- identity ---
@@ -345,7 +564,8 @@ impl Mouse {
     }
 
     pub fn set_dpi(&self, x: u16, y: u16) -> Result<()> {
-        self.raw(&cmd::set_dpi_xy(x.clamp(DPI_MIN, DPI_MAX), y.clamp(DPI_MIN, DPI_MAX))).map(drop)
+        let max = self.spec.dpi_max;
+        self.raw(&cmd::set_dpi_xy(x.clamp(DPI_MIN, max), y.clamp(DPI_MIN, max))).map(drop)
     }
 
     pub fn dpi_stages(&self) -> Result<DpiStages> {
@@ -362,8 +582,9 @@ impl Mouse {
     }
 
     pub fn set_dpi_stages(&self, active: u8, stages: &[(u16, u16)]) -> Result<()> {
+        let max = self.spec.dpi_max;
         let stages: Vec<(u16, u16)> =
-            stages.iter().take(5).map(|(x, y)| (x.clamp(&DPI_MIN, &DPI_MAX).to_owned(), y.clamp(&DPI_MIN, &DPI_MAX).to_owned())).collect();
+            stages.iter().take(5).map(|(x, y)| (x.clamp(&DPI_MIN, &max).to_owned(), y.clamp(&DPI_MIN, &max).to_owned())).collect();
         let active = active.clamp(1, stages.len().max(1) as u8);
         self.raw(&cmd::set_dpi_stages(active, &stages))?;
         // Keep the live DPI in sync with the selected stage, like Synapse does.
@@ -374,36 +595,32 @@ impl Mouse {
     }
 
     pub fn polling_rate(&self) -> Result<u16> {
-        if self.is_wireless() {
-            let a = self.raw(&cmd::get_polling_rate())?.arguments;
-            cmd::polling_from_code(a[1]).or_else(|| cmd::polling_from_code(a[0])).ok_or(HidError::NoResponse)
-        } else {
-            let a = self.raw(&Report::new(TID_MOUSE, 0x00, 0x85, 0x01))?.arguments;
-            Ok(match a[0] {
-                0x01 => 1000,
-                0x02 => 500,
-                0x08 => 125,
-                _ => 0,
-            })
+        match self.spec.polling {
+            PollingStyle::HyperPolling => {
+                let a = self.raw(&cmd::get_polling_rate())?.arguments;
+                cmd::polling_from_code(a[1]).or_else(|| cmd::polling_from_code(a[0])).ok_or(HidError::NoResponse)
+            }
+            PollingStyle::Classic => {
+                let a = self.raw(&cmd::get_polling_rate_classic())?.arguments;
+                Ok(cmd::polling_from_code_classic(a[0]).unwrap_or(0))
+            }
         }
     }
 
     pub fn set_polling_rate(&self, hz: u16) -> Result<()> {
-        if self.is_wireless() {
-            if !POLLING_RATES_WIRELESS.contains(&hz) {
-                return Err(HidError::Unsupported("polling rate must be one of 125/250/500/1000/2000/4000/8000"));
+        if !self.spec.polling_rates.contains(&hz) {
+            return Err(HidError::Invalid(format!("polling rate must be one of {} on the {}", self.spec.rates_text(), self.spec.name)));
+        }
+        match self.spec.polling {
+            PollingStyle::HyperPolling => {
+                self.raw(&cmd::set_polling_rate(hz, 0x00))?;
+                self.raw(&cmd::set_polling_rate(hz, 0x01))?;
+                Ok(())
             }
-            self.raw(&cmd::set_polling_rate(hz, 0x00))?;
-            self.raw(&cmd::set_polling_rate(hz, 0x01))?;
-            Ok(())
-        } else {
-            let code = match hz {
-                1000 => 0x01,
-                500 => 0x02,
-                125 => 0x08,
-                _ => return Err(HidError::Unsupported("wired polling rate must be 125/500/1000")),
-            };
-            self.raw(&Report::new(TID_MOUSE, 0x00, 0x05, 0x01).with_args(&[code])).map(drop)
+            PollingStyle::Classic => {
+                let code = cmd::polling_code_classic(hz).ok_or(HidError::Unsupported("the classic polling command has no code for that rate"))?;
+                self.raw(&cmd::set_polling_rate_classic(code)).map(drop)
+            }
         }
     }
 
@@ -429,6 +646,9 @@ impl Mouse {
 
     /// Write a tracking plan in the order Synapse's engine for this mouse does.
     pub fn apply_tracking(&self, plan: &SensorPlan) -> Result<()> {
+        if !self.spec.sensor_tracking {
+            return Err(HidError::Unsupported("the sensor tracking page is not known to apply to this mouse"));
+        }
         // Firmware 1.11 answers "Failure" to a lift-setting write that repeats the
         // mode it already has, although it applies it, so the status of that one
         // write is not trusted: the result is read back at the end instead.
@@ -663,7 +883,7 @@ impl Mouse {
 
     /// Devices the dongle is paired with.
     pub fn paired_devices(&self) -> Result<Vec<PairedDevice>> {
-        self.need_dongle()?;
+        self.need_pairing()?;
         let a = self.raw(&cmd::get_paired_devices(TID_DONGLE))?.arguments;
         let n = (a[0] as usize).min(8);
         // Empty slots are reported as product id 0xffff.
@@ -675,29 +895,89 @@ impl Mouse {
 
     /// Put the dongle in pairing mode for a device with this product id. Returns the mode byte it answers.
     pub fn start_pairing(&self, product_id: u16) -> Result<u8> {
-        self.need_dongle()?;
+        self.need_pairing()?;
         Ok(self.raw(&cmd::set_pairing_mode(TID_DONGLE, cmd::PAIRING_START, product_id))?.arguments[0])
     }
 
     pub fn cancel_pairing(&self, product_id: u16) -> Result<()> {
-        self.need_dongle()?;
+        self.need_pairing()?;
         self.raw(&cmd::set_pairing_mode(TID_DONGLE, cmd::PAIRING_CANCEL, product_id)).map(drop)
     }
 
     /// Forget the pairing with the device that has this product id.
     pub fn unpair(&self, product_id: u16) -> Result<()> {
-        self.need_dongle()?;
+        self.need_pairing()?;
         self.raw(&cmd::unpair(TID_DONGLE, product_id)).map(drop)
     }
 
     pub fn auto_pairing(&self) -> Result<bool> {
-        self.need_dongle()?;
+        self.need_pairing()?;
         Ok(self.raw(&cmd::get_auto_pairing(TID_DONGLE))?.arguments[0] != 0)
     }
 
     pub fn set_auto_pairing(&self, on: bool) -> Result<()> {
-        self.need_dongle()?;
+        self.need_pairing()?;
         self.raw(&cmd::set_auto_pairing(TID_DONGLE, on)).map(drop)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn spec_lookup() {
+        let wired = DeviceSpec::lookup(0x00C0);
+        assert_eq!(wired.name, "Razer Viper V3 Pro (wired)");
+        assert!(!wired.wireless && !wired.pairing && wired.verified);
+        assert_eq!((wired.polling, wired.polling_rates), (PollingStyle::Classic, &RATES_CLASSIC[..]));
+        let wireless = DeviceSpec::lookup(0x00C1);
+        assert_eq!(wireless, *DeviceSpec::viper_v3_pro());
+        assert!(wireless.wireless && wireless.pairing && wireless.sensor_tracking && wireless.verified);
+        assert_eq!((wireless.polling, wireless.polling_rates, wireless.dpi_max, wireless.transaction_id), (PollingStyle::HyperPolling, &RATES_HYPERPOLLING[..], 35000, TID_MOUSE));
+        assert_eq!(DeviceSpec::default(), wireless);
+        assert_eq!(wireless.rates_text(), "125/250/500/1000/2000/4000/8000");
+        assert!(wireless.dpi_ok(35000) && !wireless.dpi_ok(35001) && !wireless.dpi_ok(99));
+        // Every row has a distinct product id and a non-empty rate list.
+        for (i, d) in DEVICES.iter().enumerate() {
+            assert!(!d.polling_rates.is_empty(), "{}", d.name);
+            assert!(DEVICES[..i].iter().all(|o| o.product_id != d.product_id), "duplicate 0x{:04x}", d.product_id);
+        }
+        // Only the author's mouse is verified so far.
+        assert_eq!(DEVICES.iter().filter(|d| d.verified).count(), 2);
+    }
+
+    #[test]
+    fn spec_unknown() {
+        let u = DeviceSpec::lookup(0x0123);
+        assert_eq!(u, DeviceSpec::unknown(0x0123));
+        assert_eq!(u.name, "Razer mouse 0x0123");
+        assert!(!u.is_known() && !u.verified && !u.wireless && !u.pairing && !u.sensor_tracking);
+        assert_eq!((u.polling, u.dpi_max, u.transaction_id), (PollingStyle::Classic, 30000, TID_MOUSE));
+        assert!(DeviceSpec::lookup(0x00B7).is_known());
+    }
+
+    #[test]
+    fn unknown_device_refuses_writes() {
+        let unknown = DeviceSpec::unknown(0x0123);
+        let read = cmd::get_dpi_xy();
+        let write = cmd::set_dpi_xy(800, 800);
+        assert!(guard_write(&unknown, false, &read).is_ok());
+        match guard_write(&unknown, false, &write) {
+            Err(HidError::Unverified(why)) => {
+                assert!(why.contains("freenapse probe") && why.contains("0x0123") && why.contains("allow_unverified"), "{why}");
+            }
+            other => panic!("{other:?}"),
+        }
+        assert!(guard_write(&unknown, true, &write).is_ok());
+        // A table row that nobody verified is refused too, with its name.
+        let listed = DeviceSpec::lookup(0x00B7);
+        let why = listed.write_refusal(false).unwrap();
+        assert!(why.contains("DeathAdder V3 Pro") && why.contains("not confirmed") || why.contains("nobody has confirmed"), "{why}");
+        assert!(guard_write(&listed, false, &write).is_err());
+        // The verified mouse writes freely.
+        assert!(guard_write(DeviceSpec::viper_v3_pro(), false, &write).is_ok());
+        assert!(guard_write(&DeviceSpec::lookup(0x00C0), false, &write).is_ok());
     }
 }
 
