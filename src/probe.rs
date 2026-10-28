@@ -1,7 +1,8 @@
 //! `freenapse probe`: read everything the mouse answers and print it raw, so
 //! the owner of a mouse that is not in the device table can paste the result
 //! into a GitHub issue and a table row can be written from it (CONTRIBUTING.md,
-//! "Adding a mouse"). Nothing here writes to the mouse.
+//! "Adding a mouse"). Nothing here writes to the mouse. Serial numbers are
+//! masked unless asked for: they identify one unit and add nothing to a table row.
 
 use crate::device::{DeviceSpec, Mouse};
 use crate::hid::{HidError, Result};
@@ -57,15 +58,22 @@ struct Probe<'a> {
 impl Probe<'_> {
     /// Send one read (re-addressed to the transaction id that answers), print
     /// the raw line and, when it answered, the decoded one.
-    fn read(&mut self, label: &str, mut req: Report, decode: &dyn Fn(&Report) -> Option<String>) -> Option<Report> {
+    fn read(&mut self, label: &str, req: Report, decode: &dyn Fn(&Report) -> Option<String>) -> Option<Report> {
+        self.read_masked(label, req, decode, false)
+    }
+
+    /// Like [`Probe::read`]; with `mask` the answer's serial number is hidden
+    /// in both the raw bytes and the decoded line (see [`mask_serial`]).
+    fn read_masked(&mut self, label: &str, mut req: Report, decode: &dyn Fn(&Report) -> Option<String>, mask: bool) -> Option<Report> {
         if req.transaction_id == TID_MOUSE {
             req.transaction_id = self.tid;
         }
         let r = self.mouse.raw_as_is(&req);
-        self.out.push(line(label, &req, &r));
-        if let Ok(r) = &r {
+        let shown = if mask { r.as_ref().map(mask_serial).map_err(Clone::clone) } else { r.clone() };
+        self.out.push(line(label, &req, &shown));
+        if let Ok(r) = &shown {
             if let Some(d) = decode(r) {
-                self.out.push(note(d));
+                self.out.push(note(if mask { format!("{d}  (masked; `freenapse probe --serials` shows it)") } else { d }));
             }
         }
         r.ok()
@@ -76,8 +84,9 @@ impl Probe<'_> {
     }
 }
 
-/// Run every read and return the report, fenced as a code block.
-pub fn run(mouse: &Mouse) -> Vec<String> {
+/// Run every read and return the report, fenced as a code block. Serial
+/// numbers are masked unless `show_serials`.
+pub fn run(mouse: &Mouse, show_serials: bool) -> Vec<String> {
     let spec = mouse.spec();
     let mut p = Probe { mouse, tid: spec.transaction_id, out: vec!["```text".to_string()] };
     p.out.push(format!("freenapse {} probe", env!("CARGO_PKG_VERSION")));
@@ -104,12 +113,12 @@ pub fn run(mouse: &Mouse) -> Vec<String> {
         p.out.push(note("no transaction id answered: is the mouse awake? keep moving it and run the probe again"));
     }
 
-    p.read("mouse serial", cmd::serial(TID_MOUSE), &|r| Some(ascii(&r.arguments[..22])));
+    p.read_masked("mouse serial", cmd::serial(TID_MOUSE), &|r| Some(ascii(&r.arguments[..22])), !show_serials);
     p.read("device mode", cmd::get_device_mode(), &|r| Some(format!("mode {} ({})", r.arguments[0], if r.arguments[0] == 3 { "driver" } else { "normal" })));
     p.blank();
 
     p.read("dongle firmware", cmd::firmware_version(TID_DONGLE), &|r| Some(format!("firmware {}.{}", r.arguments[0], r.arguments[1])));
-    p.read("dongle serial", cmd::serial(TID_DONGLE), &|r| Some(ascii(&r.arguments[..22])));
+    p.read_masked("dongle serial", cmd::serial(TID_DONGLE), &|r| Some(ascii(&r.arguments[..22])), !show_serials);
     p.read("dongle paired list", cmd::get_paired_devices(TID_DONGLE), &|r| {
         let n = (r.arguments[0] as usize).min(8);
         let items: Vec<String> = (0..n).map(|i| format!("pid {:02x}{:02x} state {}", r.arguments[2 + 3 * i], r.arguments[3 + 3 * i], r.arguments[1 + 3 * i])).collect();
@@ -190,6 +199,18 @@ fn describe_spec(spec: &DeviceSpec) -> String {
     }
 }
 
+/// The serial answer with everything after its first four characters replaced
+/// by `*`, so the family prefix stays readable and the unit is not identified.
+pub fn mask_serial(r: &Report) -> Report {
+    let mut m = r.clone();
+    for b in m.arguments[..22].iter_mut().skip(4) {
+        if *b != 0 {
+            *b = b'*';
+        }
+    }
+    m
+}
+
 fn ascii(bytes: &[u8]) -> String {
     let s: String = bytes.iter().take_while(|b| **b != 0).map(|b| if b.is_ascii_graphic() { *b as char } else { '?' }).collect();
     if s.is_empty() { "(empty)".into() } else { s }
@@ -218,5 +239,16 @@ mod tests {
         assert_eq!(ascii(b"PM2401\0\0"), "PM2401");
         assert_eq!(ascii(&[0, 0]), "(empty)");
         assert_eq!(note("x"), format!("{:<22} = x", ""));
+    }
+
+    #[test]
+    fn serial_masking() {
+        let mut r = cmd::serial(TID_MOUSE);
+        r.arguments[..15].copy_from_slice(b"PM2431H32400480");
+        let m = mask_serial(&r);
+        assert_eq!(ascii(&m.arguments[..22]), "PM24***********");
+        assert_eq!(hex(&m.arguments, 6), "50 4d 32 34 2a 2a");
+        assert_eq!(m.arguments[15], 0, "padding stays zero");
+        assert_eq!(ascii(&r.arguments[..22]), "PM2431H32400480", "the original is untouched");
     }
 }

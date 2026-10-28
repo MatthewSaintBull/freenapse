@@ -47,10 +47,11 @@ costs nothing:
 
 1. Run `freenapse probe` with the mouse awake (keep moving it) and paste the
    whole output, which is already a code block, into a new issue. It shows the
-   product id, which transaction id answered, firmware and serial, battery,
+   product id, which transaction id answered, firmware, battery,
    DPI and stages, which of the two polling commands answered, the profile and
    macro-memory answers and the sensor registers, each with its raw status and
-   argument bytes. Say which mouse and dongle it is and whether it was wired.
+   argument bytes. Serial numbers are masked (`--serials` shows them; they are
+   not needed). Say which mouse and dongle it is and whether it was wired.
 2. From that, a `DeviceSpec` row is written: product id, name, wireless flag,
    transaction id, polling command and rates, DPI maximum (OpenRazer's device
    list is a fine source for the maximum and the ids; take facts from it, not

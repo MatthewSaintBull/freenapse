@@ -19,7 +19,7 @@ The wireless mouse only answers while it is awake: keep moving it while running 
 
 USAGE:
   freenapse status                       battery, DPI, polling, sleep, sensor, dongle
-  freenapse probe                        what the mouse answers, raw, to paste into an issue for a new mouse
+  freenapse probe [--serials]            what the mouse answers, raw, to paste into an issue for a new mouse (serial numbers masked unless --serials)
   freenapse apply                        write the config file to the mouse (onboard memory)
   freenapse config                       print the config file path (created from the mouse if missing)
   freenapse import                       overwrite the config file with the mouse's current settings
@@ -346,7 +346,8 @@ fn run(cmd: &str, args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         "probe" => {
-            for line in freenapse::probe::run(&mouse) {
+            let show_serials = args.iter().any(|a| a == "--serials");
+            for line in freenapse::probe::run(&mouse, show_serials) {
                 println!("{line}");
             }
         }
