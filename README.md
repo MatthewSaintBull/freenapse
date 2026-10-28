@@ -174,7 +174,7 @@ happy.
 
 ## Building
 
-Needs only [rustup](https://rustup.rs). No Visual Studio required: the project
+Needs only [rustup](https://rustup.rs) 1.28.2 or newer. No Visual Studio required: the project
 pins the `stable-x86_64-pc-windows-gnu` toolchain (`rust-toolchain.toml`),
 which ships its own linker.
 

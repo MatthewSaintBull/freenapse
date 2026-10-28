@@ -13,13 +13,15 @@ jobs:
   build:
     name: Build and test (Windows, GNU toolchain)
     runs-on: windows-latest
+    env:
+      # Same toolchain as rust-toolchain.toml. Set here too because rustup 1.28.0/1.28.1
+      # reject a host tuple in the file's channel field; the variable takes precedence.
+      RUSTUP_TOOLCHAIN: stable-x86_64-pc-windows-gnu
     steps:
       - uses: actions/checkout@v4
 
-      # rust-toolchain.toml pins stable-x86_64-pc-windows-gnu; rustup installs it on demand.
       - name: Install the pinned toolchain
-        shell: bash
-        run: rustup show active-toolchain || rustup toolchain install
+        run: rustup toolchain install stable-x86_64-pc-windows-gnu --profile minimal
 
       - uses: Swatinem/rust-cache@v2
 
