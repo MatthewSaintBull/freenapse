@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 80" width="360" height="80" role="img" aria-labelledby="t">
+  <title id="t">freenapse</title>
+  <g transform="translate(8 8)">
+    <rect width="64" height="64" rx="12" fill="#181818"/>
+    <path d="M41.26 17.74A17 17 0 1 0 46.26 22.74" fill="none" stroke="#1db954" stroke-width="5" stroke-linecap="round"/>
+    <circle cx="50" cy="14" r="4.5" fill="#3fd676"/>
+  </g>
+  <text x="88" y="52" font-family="'Segoe UI Variable Display', 'Segoe UI', Inter, system-ui, sans-serif" font-size="34" font-weight="600" letter-spacing="-0.5"><tspan fill="#1db954">free</tspan><tspan fill="#f3f3f3">napse</tspan></text>
+</svg>
