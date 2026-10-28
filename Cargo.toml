@@ -8,7 +8,7 @@ license = "MIT"
 readme = "README.md"
 keywords = ["razer", "mouse", "hid", "windows", "synapse"]
 categories = ["hardware-support", "command-line-utilities"]
-# repository = "https://github.com/<account>/freenapse"   # fill in before the first push
+repository = "https://github.com/MatthewSaintBull/freenapse"
 
 [dependencies]
 serde = { version = "1.0.229", features = ["derive"] }
