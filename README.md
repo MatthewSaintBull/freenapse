@@ -8,7 +8,8 @@
 [![CI](https://github.com/MatthewSaintBull/freenapse/actions/workflows/ci.yml/badge.svg)](https://github.com/MatthewSaintBull/freenapse/actions/workflows/ci.yml)
 
 A tiny Rust replacement for Razer Synapse, built for the **Razer Viper V3 Pro**
-(wired, or through the HyperSpeed / HyperPolling dongle).
+(wired, or through the HyperSpeed / HyperPolling dongle). Download, changelog and
+guides: **https://freenapse.app**.
 
 ![The Customize page: button assignment with the mouse drawing](assets/screenshot-customize.png)
 

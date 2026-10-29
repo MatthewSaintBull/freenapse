@@ -9,6 +9,7 @@ readme = "README.md"
 keywords = ["razer", "mouse", "hid", "windows", "synapse"]
 categories = ["hardware-support", "command-line-utilities"]
 repository = "https://github.com/MatthewSaintBull/freenapse"
+homepage = "https://freenapse.app"
 
 [dependencies]
 serde = { version = "1.0.229", features = ["derive"] }
