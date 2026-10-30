@@ -48,7 +48,8 @@ the unverified rows come from OpenRazer's device list.
 | Viper V3 Pro, HyperSpeed / HyperPolling dongle | 0x00C1 | 0x1f | HyperPolling `00/40` | 125 .. 8000 | 35000 | ✅ | ✅ | the author |
 | HyperPolling wireless dongle (standalone) | 0x00B3 | 0x1f | HyperPolling | 125 .. 8000 | 30000 | ❓ | ✅ | nobody yet |
 | DeathAdder V4 Pro, wired / wireless | 0x00BE / 0x00BF | 0x1f | HyperPolling | 125 .. 8000 | 45000 | ❓ | wireless | nobody yet |
-| DeathAdder V3 Pro, wired / wireless | 0x00B6 / 0x00B7 | 0x1f | classic | 125, 500, 1000 | 35000 | ❓ | — | nobody yet |
+| DeathAdder V3 Pro, wired | 0x00B6 | 0x1f | classic `00/05` | 125, 500, 1000 | 30000 | ❓ (smart lift only) | — | — |
+| DeathAdder V3 Pro, wireless | 0x00B7 | 0x1f | classic | 125, 500, 1000 | 35000 | ❓ | — | nobody yet |
 | DeathAdder V3 (wired, 8K) | 0x00B2 | 0x1f | HyperPolling | 125 .. 8000 | 30000 | ❓ | — | nobody yet |
 | Viper V2 Pro, wired / wireless | 0x00A5 / 0x00A6 | 0x1f | classic | 125, 500, 1000 | 30000 | ❓ | — | nobody yet |
 | Viper V3 HyperSpeed | 0x00B8 | 0x1f | classic | 125, 500, 1000 | 30000 | ❓ | — | nobody yet |
@@ -63,6 +64,14 @@ nobody has checked whether that mouse has it, so the Calibration page is
 hidden. `freenapse probe` prints what any of these answers; `[device]
 allow_unverified = true` in the config lets the owner of an unverified mouse
 write to it at their own risk.
+
+The wired probe and write/read-back report are in [issue #2](https://github.com/MatthewSaintBull/freenapse/issues/2).
+The 30000 DPI limit follows [Razer's Focus Pro 30K specification](https://mysupport.razer.com/app/answers/detail/a_id/6125/kw/mice).
+Angle and Dynamic Sensitivity getters failed on that unit, so those commands
+and controls are disabled. Full sensor tracking and wireless 0x00B7 remain
+unverified. Both rows require `[device] allow_unverified = true` for writes;
+re-import preserves the choice. The shipped 8000 Hz in-game setting stays valid
+on a wired Viper V3 Pro but fails if a classic-polling mouse switches to it.
 
 ## Feature map
 

@@ -103,6 +103,14 @@ fn is_gone(e: &HidError) -> bool {
     matches!(e, HidError::Win32(..) | HidError::NotFound)
 }
 
+fn is_asleep_error(e: &HidError) -> bool {
+    matches!(e, HidError::Status(crate::protocol::Status::Timeout) | HidError::NoResponse)
+}
+
+fn clamp_dpi(v: i32, spec: &DeviceSpec) -> i32 {
+    v.clamp(100, spec.dpi_max as i32)
+}
+
 const CLASS_NAME: &str = "freenapse-settings";
 const WM_MOUSELEAVE: u32 = 0x02A3;
 const TIMER_TICK: usize = 1;
@@ -1962,7 +1970,7 @@ impl Ui {
         match id {
             Id::StageValue(i) => {
                 if let Ok(v) = text.parse::<i32>() {
-                    let v = v.clamp(100, 35000);
+                    let v = clamp_dpi(v, &self.spec);
                     if self.cfg.dpi.stages.get(i).copied() != Some(v as u16) {
                         self.changed(id, v);
                         return;
@@ -1971,7 +1979,7 @@ impl Ui {
             }
             Id::StageY(i) => {
                 if let Ok(v) = text.parse::<i32>() {
-                    let v = v.clamp(100, 35000);
+                    let v = clamp_dpi(v, &self.spec);
                     if self.cfg.dpi.y_stages.get(i).copied() != Some(v as u16) {
                         self.changed(id, v);
                         return;
@@ -2373,7 +2381,7 @@ impl Ui {
                 let d = &mut self.cfg.dpi;
                 while d.stages.len() < n {
                     let last = *d.stages.last().unwrap_or(&800);
-                    d.stages.push(last.saturating_mul(2).clamp(100, 35000));
+                    d.stages.push(clamp_dpi(last.saturating_mul(2) as i32, &self.spec) as u16);
                 }
                 d.stages.truncate(n);
                 d.active = d.active.clamp(1, n as u8);
@@ -2381,7 +2389,7 @@ impl Ui {
             }
             Id::StageValue(i) => {
                 if let Some(s) = self.cfg.dpi.stages.get_mut(i) {
-                    *s = v.clamp(100, 35000) as u16;
+                    *s = clamp_dpi(v, &self.spec) as u16;
                 }
                 Write::Stages
             }
@@ -2391,7 +2399,7 @@ impl Ui {
                     d.y_stages = d.stages.clone();
                 }
                 if let Some(s) = d.y_stages.get_mut(i) {
-                    *s = v.clamp(100, 35000) as u16;
+                    *s = clamp_dpi(v, &self.spec) as u16;
                 }
                 Write::Stages
             }
@@ -2825,7 +2833,7 @@ impl Ui {
     /// change the config rejects (for example losing the last left click) is
     /// undone in the window too.
     unsafe fn commit(&mut self, write: Write) {
-        if let Err(e) = self.cfg.validate() {
+        if let Err(e) = self.cfg.validate_for(&self.spec) {
             self.set_status(&format!("Not changed: {e}"), ERR);
             self.cfg = self.last_good.clone();
             self.key_mode = None;
@@ -2975,13 +2983,21 @@ impl Ui {
                 false
             }
             Err(HidError::Unsupported(e)) => {
+                self.asleep = false;
+                self.pending = false;
                 self.set_status(&format!("Saved, but the mouse rejected it: {e}"), ERR);
                 false
             }
-            Err(_) => {
+            Err(e) if is_asleep_error(&e) => {
                 self.asleep = true;
                 self.pending = true;
                 self.set_status("Saved. The mouse is asleep: move it and the change will be applied", WARN);
+                false
+            }
+            Err(e) => {
+                self.asleep = false;
+                self.pending = false;
+                self.set_status(&format!("Saved to config, but not applied to the mouse: {e}"), ERR);
                 false
             }
         };
@@ -3028,7 +3044,12 @@ impl Ui {
                         ui.read_live(false);
                     }
                     Err(e) if is_gone(&e) => ui.connected = false,
-                    Err(_) => {}
+                    Err(e) if is_asleep_error(&e) => {}
+                    Err(e) => {
+                        ui.pending = false;
+                        ui.asleep = false;
+                        ui.set_status(&format!("Not applied to the mouse: {e}"), ERR);
+                    }
                 }
                 ui.repaint();
             })
@@ -3042,7 +3063,8 @@ impl Ui {
             dev.check(&result);
             Box::new(move |ui: &mut Ui| {
                 match result {
-                    Ok(cfg) => {
+                    Ok(mut cfg) => {
+                        cfg.preserve_device_access(&config_path());
                         ui.cfg = cfg;
                         ui.last_good = ui.cfg.clone();
                         ui.cfg_error = None;
@@ -3078,5 +3100,32 @@ impl Ui {
 
     pub(crate) fn is_recording(&self) -> bool {
         self.recording.is_some()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejected_writes_are_not_sleep_failures() {
+        assert!(!is_asleep_error(&HidError::Unverified("read-only".into())));
+        assert!(!is_asleep_error(&HidError::Unsupported("not on this mouse")));
+        assert!(!is_asleep_error(&HidError::Status(crate::protocol::Status::Failure)));
+        assert!(is_asleep_error(&HidError::Status(crate::protocol::Status::Timeout)));
+        assert!(is_asleep_error(&HidError::NoResponse));
+    }
+
+    #[test]
+    fn dpi_input_respects_the_connected_mouses_limit() {
+        let deathadder = DeviceSpec::lookup(0x00B6);
+        let viper = DeviceSpec::lookup(0x00C0);
+        assert_eq!(clamp_dpi(32000, &deathadder), 30000);
+        assert_eq!(clamp_dpi(32000, &viper), 32000);
+        let mut cfg = Config::default();
+        cfg.dpi.stages = vec![32000];
+        cfg.dpi.active = 1;
+        assert!(cfg.validate_for(&deathadder).is_err());
+        cfg.validate_for(&viper).unwrap();
     }
 }
