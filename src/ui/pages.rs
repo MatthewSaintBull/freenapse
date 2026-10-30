@@ -232,7 +232,7 @@ impl Form {
 
     /// A DPI stage row: radio (active stage), slider, and a box to type the value.
     /// With `y`, a second row for the vertical DPI follows (independent X/Y).
-    pub fn stage(&mut self, i: usize, dpi: u16, y: Option<u16>, active: bool, selectable: bool) {
+    pub fn stage(&mut self, i: usize, dpi: u16, y: Option<u16>, active: bool, selectable: bool, dpi_max: u16) {
         let h = ROW_H;
         let title = if selectable { format!("Stage {}", i + 1) } else { "Sensitivity".to_string() };
         let title = if y.is_some() { format!("{title}  ·  X") } else { title };
@@ -242,19 +242,19 @@ impl Form {
         } else {
             self.push(Id::None, self.x + PAD, self.y, LABEL_W - 10, h, Kind::Text { text: title, font: FontKind::Bold, color: TEXT, flags: DT_ROW });
         }
-        self.dpi_controls(Id::StageValue(i), dpi, h);
+        self.dpi_controls(Id::StageValue(i), dpi, h, dpi_max);
         self.y += h;
         if let Some(yd) = y {
             self.push(Id::None, self.x + PAD + 28, self.y, LABEL_W - 38, h, Kind::Text { text: "Y".to_string(), font: FontKind::Body, color: MUTED, flags: DT_ROW });
-            self.dpi_controls(Id::StageY(i), yd, h);
+            self.dpi_controls(Id::StageY(i), yd, h, dpi_max);
             self.y += h;
         }
         self.divider(self.y - 1);
     }
 
-    fn dpi_controls(&mut self, id: Id, dpi: u16, h: i32) {
+    fn dpi_controls(&mut self, id: Id, dpi: u16, h: i32, dpi_max: u16) {
         let edit_w = 88;
-        self.push(id, self.cx(), self.y, self.cw() - edit_w - 16, h, Kind::Slider { min: 100, max: 35000, step: 50, value: dpi as i32, fmt: |v| v.to_string(), ticks: Vec::new(), show_value: false, enabled: true });
+        self.push(id, self.cx(), self.y, self.cw() - edit_w - 16, h, Kind::Slider { min: 100, max: dpi_max as i32, step: 50, value: dpi as i32, fmt: |v| v.to_string(), ticks: Vec::new(), show_value: false, enabled: true });
         self.push(id, self.right() - edit_w, self.y + (h - BUTTON_H) / 2, edit_w, BUTTON_H, Kind::Edit { text: dpi.to_string(), numeric: true });
     }
 
@@ -425,40 +425,41 @@ fn performance(ui: &Ui, f: &mut Form) {
         f.chips("Number of stages", "", &counts, Some(cfg.dpi.stages.len() - 1), Id::StageCount);
         f.gap(4);
         for (i, d) in cfg.dpi.stages.iter().enumerate() {
-            f.stage(i, *d, y_of(i), cfg.dpi.active as usize == i + 1, true);
+            f.stage(i, *d, y_of(i), cfg.dpi.active as usize == i + 1, true, ui.spec.dpi_max);
         }
-        f.note("Select the stage to use now. Range 100 to 35000 DPI in steps of 50; type an exact value in the box.");
+        f.note(&format!("Select the stage to use now. Range 100 to {} DPI in steps of 50; type an exact value in the box.", ui.spec.dpi_max));
     } else {
-        f.stage(0, cfg.dpi.stages[0], y_of(0), true, false);
-        f.note("Range 100 to 35000 DPI in steps of 50; type an exact value in the box.");
+        f.stage(0, cfg.dpi.stages[0], y_of(0), true, false, ui.spec.dpi_max);
+        f.note(&format!("Range 100 to {} DPI in steps of 50; type an exact value in the box.", ui.spec.dpi_max));
     }
 
-    f.section_icon("Dynamic Sensitivity", Some(Icon::Sliders));
-    let a = &cfg.acceleration;
-    f.toggle("Enable Dynamic Sensitivity", "The mouse scales its sensitivity with how fast you move it (stored onboard)", a.enabled, Id::AccelOn);
-    if a.enabled {
-        let mode = a.mode().unwrap_or(Mode::Classic);
-        let modes = [Mode::Classic, Mode::Natural, Mode::Jump, Mode::Custom].map(|m| m.label().to_string());
-        f.chips("Curve", "", &modes, Some(mode as usize), Id::AccelMode);
-        f.gap(4);
-        if mode == Mode::Custom {
-            f.curve(&a.curve, true, ui.curve_sel);
-            let can_remove = a.curve.len() > 2 && ui.curve_sel.is_some_and(|i| i > 0);
-            let can_add = a.curve.len() < crate::accel::MAX_CONTROL_POINTS;
-            f.buttons(&[
-                ("Add point", if can_add { Id::CurveAdd } else { Id::None }, false),
-                ("Remove point", if can_remove { Id::CurveRemove } else { Id::None }, false),
-                ("Start from Classic", Id::CurveTemplate(0), false),
-                ("Natural", Id::CurveTemplate(1), false),
-                ("Jump", Id::CurveTemplate(2), false),
-            ]);
-            f.note("Drag the points: horizontal is the speed of the movement, vertical the sensitivity multiplier (0.1 to 1.5). The curve stays flat after the last point. Click a point, then \"Remove point\" to delete it.");
-        } else {
-            f.curve(&mode.template(), false, None);
-            f.note("Classic, Natural and Jump are built into the mouse's firmware; the plot shows Synapse's drawing of each. Pick Custom to shape your own curve.");
+    if ui.spec.supports_acceleration {
+        f.section_icon("Dynamic Sensitivity", Some(Icon::Sliders));
+        let a = &cfg.acceleration;
+        f.toggle("Enable Dynamic Sensitivity", "The mouse scales its sensitivity with how fast you move it (stored onboard)", a.enabled, Id::AccelOn);
+        if a.enabled {
+            let mode = a.mode().unwrap_or(Mode::Classic);
+            let modes = [Mode::Classic, Mode::Natural, Mode::Jump, Mode::Custom].map(|m| m.label().to_string());
+            f.chips("Curve", "", &modes, Some(mode as usize), Id::AccelMode);
+            f.gap(4);
+            if mode == Mode::Custom {
+                f.curve(&a.curve, true, ui.curve_sel);
+                let can_remove = a.curve.len() > 2 && ui.curve_sel.is_some_and(|i| i > 0);
+                let can_add = a.curve.len() < crate::accel::MAX_CONTROL_POINTS;
+                f.buttons(&[
+                    ("Add point", if can_add { Id::CurveAdd } else { Id::None }, false),
+                    ("Remove point", if can_remove { Id::CurveRemove } else { Id::None }, false),
+                    ("Start from Classic", Id::CurveTemplate(0), false),
+                    ("Natural", Id::CurveTemplate(1), false),
+                    ("Jump", Id::CurveTemplate(2), false),
+                ]);
+                f.note("Drag the points: horizontal is the speed of the movement, vertical the sensitivity multiplier (0.1 to 1.5). The curve stays flat after the last point. Click a point, then \"Remove point\" to delete it.");
+            } else {
+                f.curve(&mode.template(), false, None);
+                f.note("Classic, Natural and Jump are built into the mouse's firmware; the plot shows Synapse's drawing of each. Pick Custom to shape your own curve.");
+            }
         }
     }
-
     f.section_icon("Polling rate", Some(Icon::Bolt));
     let rates: &[u16] = ui.spec.polling_rates;
     let sel = rates.iter().position(|r| *r == cfg.polling.rate).unwrap_or(0);
@@ -466,11 +467,13 @@ fn performance(ui: &Ui, f: &mut Form) {
 
     f.note("Games can switch to their own polling rate, DPI stage and buttons while they run: see the Games page.");
 
-    f.section_icon("Rotation", Some(Icon::Sync));
-    let on = cfg.sensor.rotation != 0;
-    f.toggle("Enable rotation", "Compensate a tilted grip by rotating the sensor's axes", on, Id::RotationOn);
-    if on {
-        f.slider("Angle", "", -30, 30, 1, cfg.sensor.rotation as i32, |v| format!("{v}°"), Id::Rotation);
+    if ui.spec.supports_rotation {
+        f.section_icon("Rotation", Some(Icon::Sync));
+        let on = cfg.sensor.rotation != 0;
+        f.toggle("Enable rotation", "Compensate a tilted grip by rotating the sensor's axes", on, Id::RotationOn);
+        if on {
+            f.slider("Angle", "", -30, 30, 1, cfg.sensor.rotation as i32, |v| format!("{v}°"), Id::Rotation);
+        }
     }
 }
 

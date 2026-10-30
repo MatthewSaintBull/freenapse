@@ -181,7 +181,7 @@ pub fn apply(mouse: &Mouse, cfg: &Config, polling_rate: u16) -> Result<Vec<Strin
         }
     }
 
-    if accel_differs(mouse, cfg)? {
+    if spec.supports_acceleration && accel_differs(mouse, cfg)? {
         let mode = cfg.acceleration.mode().map_err(|_| HidError::Unsupported("invalid [acceleration] section"))?;
         let samples = cfg.acceleration.samples();
         mouse.set_acceleration(cfg.acceleration.enabled, mode, Some(&samples))?;
@@ -189,16 +189,18 @@ pub fn apply(mouse: &Mouse, cfg: &Config, polling_rate: u16) -> Result<Vec<Strin
     }
 
     let want_rot = cfg.sensor.rotation;
-    match mouse.rotation() {
-        Ok((rot_on, rot_deg)) => {
-            if rot_on != (want_rot != 0) || (rot_on && rot_deg != want_rot) {
-                mouse.set_rotation(want_rot)?;
-                changes.push(format!("rotation -> {want_rot} deg"));
+    if spec.supports_rotation {
+        match mouse.rotation() {
+            Ok((rot_on, rot_deg)) => {
+                if rot_on != (want_rot != 0) || (rot_on && rot_deg != want_rot) {
+                    mouse.set_rotation(want_rot)?;
+                    changes.push(format!("rotation -> {want_rot} deg"));
+                }
             }
+            Err(e) if spec.sensor_tracking => return Err(e),
+            // Angle tune is part of the sensor page: left alone where that page is unknown.
+            Err(_) => {}
         }
-        Err(e) if spec.sensor_tracking => return Err(e),
-        // Angle tune is part of the sensor page: left alone where that page is unknown.
-        Err(_) => {}
     }
 
     if spec.pairing && mouse.dongle_led_mode().ok() != Some(cfg.dongle.led) {

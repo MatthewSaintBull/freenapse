@@ -158,8 +158,9 @@ fn run(cmd: &str, args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     match cmd {
         "status" => status(&mouse)?,
         "import" => {
-            let cfg = apply::import(&mouse)?;
+            let mut cfg = apply::import(&mouse)?;
             let p = config_path();
+            cfg.preserve_device_access(&p);
             Config::write_new(&p, &cfg)?;
             println!("wrote {}", p.display());
             print!("{}", cfg.render());

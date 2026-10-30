@@ -369,6 +369,11 @@ impl Config {
         std::fs::read_to_string(path).ok().and_then(|t| toml::from_str::<Config>(&t).ok()).map(|c| c.device.allow_unverified).unwrap_or(false)
     }
 
+    /// Re-import replaces mouse settings, not the owner's write permission.
+    pub fn preserve_device_access(&mut self, path: &Path) {
+        self.device.allow_unverified = Self::allow_unverified_at(path);
+    }
+
     /// Validate against the Viper V3 Pro's ranges (what the file is checked
     /// against when no mouse is open). With a mouse open use [`Config::validate_for`].
     pub fn validate(&self) -> Result<(), String> {
@@ -1015,6 +1020,27 @@ mod tests {
         assert!(!Config::allow_unverified_at(&p));
         assert!(!Config::allow_unverified_at(&dir.join("missing.toml")));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn reimport_preserves_opt_in_from_existing_file() {
+        let dir = std::env::temp_dir().join(format!("freenapse-reimport-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.toml");
+        std::fs::write(&path, "[device]\nallow_unverified = true\n").unwrap();
+        let mut imported = Config::default();
+        imported.preserve_device_access(&path);
+        assert!(imported.device.allow_unverified);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn shipped_config_stays_valid_for_wired_viper_with_wireless_game_rate() {
+        let cfg: Config = toml::from_str(DEFAULT_TOML).unwrap();
+        assert_eq!(cfg.polling.game_rate, 8000);
+        cfg.validate_for(&crate::device::DeviceSpec::lookup(0x00C0)).unwrap();
+        let omitted: Config = toml::from_str("[polling]\nrate = 500\n").unwrap();
+        assert_eq!(omitted.polling.game_rate, 8000);
     }
 
     #[test]
