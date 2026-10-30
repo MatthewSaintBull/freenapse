@@ -46,6 +46,8 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           name: freenapse-windows-x64
@@ -53,12 +55,30 @@ jobs:
       - name: Checksum
         run: sha256sum freenapse.exe > freenapse.exe.sha256
 
+      # The release notes are the tag's section of CHANGELOG.md ("## 0.2.0 (date)"
+      # for tag v0.2.0). freenapse.app renders the same text on its changelog page.
+      # No section means no release: write it first, then tag.
+      - name: Release notes from CHANGELOG.md
+        run: |
+          python3 - "$GITHUB_REF_NAME" > notes.md <<'EOF'
+          import re, sys
+          version = sys.argv[1].lstrip("v")
+          text = open("CHANGELOG.md", encoding="utf-8").read()
+          m = re.search(r"^## " + re.escape(version) + r"\b[^\n]*\n(.*?)(?=^## |\Z)", text, re.S | re.M)
+          if not m or not m.group(1).strip():
+              sys.exit(f"CHANGELOG.md has no section for {version}; add it and move the tag")
+          print(m.group(1).strip())
+          print()
+          print("`freenapse.exe` below is the whole program; `freenapse.exe.sha256` is its checksum.")
+          EOF
+          cat notes.md
+
       - uses: softprops/action-gh-release@v2
         with:
           files: |
             freenapse.exe
             freenapse.exe.sha256
-          generate_release_notes: true
+          body_path: notes.md
 
       # freenapse.app rebuilds its changelog and download button from the
       # releases. It also rebuilds once a day on its own, so this step only

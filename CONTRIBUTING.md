@@ -66,6 +66,14 @@ costs nothing:
 4. Once the owner confirms, the row becomes `verified true` and the mouse
    joins the table in `FEATURES.md` with their name in the verified-by column.
 
+## Releasing
+
+Write the version's section in `CHANGELOG.md` (`## 0.3.0 (date)`), bump
+`Cargo.toml`, commit, then tag `v0.3.0` and push the tag. CI builds the
+executable, takes that section as the release notes and attaches the
+executable and its checksum; freenapse.app shows the same notes on its
+changelog page. A tag without a changelog section fails the release job.
+
 ## Pull requests
 
 * One change per pull request, with the `FEATURES.md` / `ROADMAP.md` rows it
