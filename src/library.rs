@@ -39,7 +39,12 @@ pub fn scan() -> Vec<Game> {
     for g in all {
         // The first launcher wins: an EA game bought on Steam is also in the uninstall list.
         let d = norm_dir(&g.dir);
-        if d.is_empty() || out.iter().any(|o| { let od = norm_dir(&o.dir); od == d || is_inside(&d, &od) || is_inside(&od, &d) }) {
+        if d.is_empty()
+            || out.iter().any(|o| {
+                let od = norm_dir(&o.dir);
+                od == d || is_inside(&d, &od) || is_inside(&od, &d)
+            })
+        {
             continue;
         }
         out.push(g);
@@ -345,7 +350,9 @@ fn xbox() -> Vec<Game> {
                 let i = rest.find(&format!("{a}=\""))? + a.len() + 2;
                 Some(rest[i..].split('"').next()?.to_string())
             };
-            let name = attr("ShellVisuals", "DefaultDisplayName").filter(|n| !n.is_empty() && !n.starts_with("ms-resource")).unwrap_or_else(|| e.file_name().to_string_lossy().to_string());
+            let name = attr("ShellVisuals", "DefaultDisplayName")
+                .filter(|n| !n.is_empty() && !n.starts_with("ms-resource"))
+                .unwrap_or_else(|| e.file_name().to_string_lossy().to_string());
             let exe = attr("Executable", "Name").map(|x| file_name(&x)).unwrap_or_default();
             // The largest logo the package ships (paths are relative to Content).
             let art = ["Square480x480Logo", "Square150x150Logo", "StoreLogo"]
@@ -376,7 +383,8 @@ fn publisher_source(publisher: &str) -> Option<&'static str> {
 
 /// The launchers and services themselves, which share the publishers' names.
 fn is_launcher(name: &str) -> bool {
-    const LAUNCHERS: [&str; 9] = ["ea app", "origin", "battle.net", "ubisoft connect", "uplay", "riot client", "rockstar games launcher", "rockstar games social club", "ea anticheat"];
+    const LAUNCHERS: [&str; 9] =
+        ["ea app", "origin", "battle.net", "ubisoft connect", "uplay", "riot client", "rockstar games launcher", "rockstar games social club", "ea anticheat"];
     let n = name.to_lowercase();
     LAUNCHERS.iter().any(|l| n == *l || n.starts_with(&format!("{l} ")))
 }
@@ -412,7 +420,15 @@ fn reg_string(root: HKEY, key: &str, value: &str) -> Option<String> {
     unsafe {
         let mut buf = vec![0u16; 2048];
         let mut len = (buf.len() * 2) as u32;
-        let rc = RegGetValueW(root, wide(key).as_ptr(), wide(value).as_ptr(), RRF_RT_REG_SZ | RRF_RT_REG_EXPAND_SZ, ptr::null_mut(), buf.as_mut_ptr() as *mut _, &mut len);
+        let rc = RegGetValueW(
+            root,
+            wide(key).as_ptr(),
+            wide(value).as_ptr(),
+            RRF_RT_REG_SZ | RRF_RT_REG_EXPAND_SZ,
+            ptr::null_mut(),
+            buf.as_mut_ptr() as *mut _,
+            &mut len,
+        );
         if rc != ERROR_SUCCESS {
             return None;
         }

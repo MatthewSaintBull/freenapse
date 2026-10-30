@@ -8,6 +8,9 @@
 //! - [`config`]: TOML configuration file.
 //! - [`apply`]: push a configuration to the mouse, writing only what differs.
 
+// Nested `if let`s are kept where they read better than a let-chain.
+#![allow(clippy::collapsible_if, clippy::collapsible_match, clippy::items_after_test_module)]
+
 pub mod accel;
 pub mod apply;
 pub mod autostart;

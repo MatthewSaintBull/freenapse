@@ -7,10 +7,10 @@ use std::borrow::Cow;
 use std::thread;
 use std::time::Duration;
 
-use crate::hid::{HidDevice, HidError, Result};
-use crate::protocol::{HID_BUF_LEN, Report, TID_DONGLE, TID_MOUSE, cmd};
 use crate::accel;
+use crate::hid::{HidDevice, HidError, Result};
 use crate::macros::{self, Playback};
+use crate::protocol::{HID_BUF_LEN, Report, TID_DONGLE, TID_MOUSE, cmd};
 use crate::sensor::{self, SensorPlan};
 
 pub const VENDOR_RAZER: u16 = 0x1532;
@@ -58,7 +58,6 @@ pub struct DeviceSpec {
     /// unless the config has `[device] allow_unverified = true`.
     pub verified: bool,
 }
-
 
 macro_rules! spec {
     ($pid:expr, $name:expr, wireless $w:expr, tid $tid:expr, $style:ident, $rates:expr, dpi $dpi:expr, sensor $s:expr, pairing $p:expr, verified $v:expr) => {
@@ -252,21 +251,37 @@ pub struct ButtonFunction(pub [u8; 7]);
 
 impl ButtonFunction {
     pub const DISABLED: ButtonFunction = ButtonFunction([0x00, 0, 0, 0, 0, 0, 0]);
-    pub fn mouse_button(code: u8) -> Self { ButtonFunction([0x01, 1, code, 0, 0, 0, 0]) }
-    pub fn key(modifiers: u8, hid_key: u8) -> Self { ButtonFunction([0x02, 2, modifiers, hid_key, 0, 0, 0]) }
+    pub fn mouse_button(code: u8) -> Self {
+        ButtonFunction([0x01, 1, code, 0, 0, 0, 0])
+    }
+    pub fn key(modifiers: u8, hid_key: u8) -> Self {
+        ButtonFunction([0x02, 2, modifiers, hid_key, 0, 0, 0])
+    }
     pub fn consumer(usage: u16) -> Self {
         let b = usage.to_be_bytes();
         ButtonFunction([0x0a, 2, b[0], b[1], 0, 0, 0])
     }
     /// 0x01 = next stage, 0x02 = previous (both wrap), 0x03 + level = jump to a stage.
-    pub fn dpi_cycle_up() -> Self { ButtonFunction([0x06, 1, 0x01, 0, 0, 0, 0]) }
-    pub fn dpi_cycle_down() -> Self { ButtonFunction([0x06, 1, 0x02, 0, 0, 0, 0]) }
-    pub fn dpi_stage(level: u8) -> Self { ButtonFunction([0x06, 2, 0x03, level, 0, 0, 0]) }
+    pub fn dpi_cycle_up() -> Self {
+        ButtonFunction([0x06, 1, 0x01, 0, 0, 0, 0])
+    }
+    pub fn dpi_cycle_down() -> Self {
+        ButtonFunction([0x06, 1, 0x02, 0, 0, 0, 0])
+    }
+    pub fn dpi_stage(level: u8) -> Self {
+        ButtonFunction([0x06, 2, 0x03, level, 0, 0, 0])
+    }
     /// 0x01 next, 0x02 previous, 0x03 + id, 0x04 cycle up, 0x05 cycle down.
-    pub fn profile_next() -> Self { ButtonFunction([0x07, 1, 0x01, 0, 0, 0, 0]) }
-    pub fn hypershift() -> Self { ButtonFunction([0x0c, 1, 0x01, 0, 0, 0, 0]) }
+    pub fn profile_next() -> Self {
+        ButtonFunction([0x07, 1, 0x01, 0, 0, 0, 0])
+    }
+    pub fn hypershift() -> Self {
+        ButtonFunction([0x0c, 1, 0x01, 0, 0, 0, 0])
+    }
     /// Synapse's "Double Click": two left clicks per press.
-    pub fn double_click() -> Self { ButtonFunction([0x0b, 1, 0x01, 0, 0, 0, 0]) }
+    pub fn double_click() -> Self {
+        ButtonFunction([0x0b, 1, 0x01, 0, 0, 0, 0])
+    }
     /// Repeat a mouse button while held, `per_second` times a second.
     pub fn turbo_button(code: u8, per_second: u8) -> Self {
         let d = turbo_delay(per_second).to_be_bytes();
@@ -278,7 +293,9 @@ impl ButtonFunction {
         ButtonFunction([0x0d, 4, modifiers, hid_key, d[0], d[1], 0])
     }
     /// System keys: [`POWER_SLEEP`], [`POWER_OFF`], [`POWER_WAKE`].
-    pub fn power_key(code: u8) -> Self { ButtonFunction([0x09, 1, code, 0, 0, 0, 0]) }
+    pub fn power_key(code: u8) -> Self {
+        ButtonFunction([0x09, 1, code, 0, 0, 0, 0])
+    }
     /// Onboard macro with one of Synapse's playback options.
     pub fn macro_play(id: u16, play: Playback) -> Self {
         let b = id.to_be_bytes();
@@ -383,15 +400,8 @@ pub fn mouse_button_name(code: u8) -> &'static str {
 }
 
 /// Physical buttons of the Viper V3 Pro as addressed by the button-mapping command.
-pub const BUTTONS: [(&str, u8); 7] = [
-    ("left", 0x01),
-    ("right", 0x02),
-    ("middle", 0x03),
-    ("back", 0x04),
-    ("forward", 0x05),
-    ("scroll-up", 0x09),
-    ("scroll-down", 0x0a),
-];
+pub const BUTTONS: [(&str, u8); 7] =
+    [("left", 0x01), ("right", 0x02), ("middle", 0x03), ("back", 0x04), ("forward", 0x05), ("scroll-up", 0x09), ("scroll-down", 0x0a)];
 
 pub fn button_code(name: &str) -> Option<u8> {
     BUTTONS.iter().find(|(n, _)| *n == name).map(|(_, c)| *c)
@@ -594,8 +604,7 @@ impl Mouse {
 
     pub fn set_dpi_stages(&self, active: u8, stages: &[(u16, u16)]) -> Result<()> {
         let max = self.spec.dpi_max;
-        let stages: Vec<(u16, u16)> =
-            stages.iter().take(5).map(|(x, y)| (x.clamp(&DPI_MIN, &max).to_owned(), y.clamp(&DPI_MIN, &max).to_owned())).collect();
+        let stages: Vec<(u16, u16)> = stages.iter().take(5).map(|(x, y)| (x.clamp(&DPI_MIN, &max).to_owned(), y.clamp(&DPI_MIN, &max).to_owned())).collect();
         let active = active.clamp(1, stages.len().max(1) as u8);
         self.raw(&cmd::set_dpi_stages(active, &stages))?;
         // Keep the live DPI in sync with the selected stage, like Synapse does.
@@ -960,7 +969,10 @@ mod tests {
         let wireless = DeviceSpec::lookup(0x00C1);
         assert_eq!(wireless, *DeviceSpec::viper_v3_pro());
         assert!(wireless.wireless && wireless.pairing && wireless.sensor_tracking && wireless.verified);
-        assert_eq!((wireless.polling, wireless.polling_rates, wireless.dpi_max, wireless.transaction_id), (PollingStyle::HyperPolling, &RATES_HYPERPOLLING[..], 35000, TID_MOUSE));
+        assert_eq!(
+            (wireless.polling, wireless.polling_rates, wireless.dpi_max, wireless.transaction_id),
+            (PollingStyle::HyperPolling, &RATES_HYPERPOLLING[..], 35000, TID_MOUSE)
+        );
         assert_eq!(DeviceSpec::default(), wireless);
         assert_eq!(wireless.rates_text(), "125/250/500/1000/2000/4000/8000");
         assert!(wireless.dpi_ok(35000) && !wireless.dpi_ok(35001) && !wireless.dpi_ok(99));
@@ -989,8 +1001,7 @@ mod tests {
         assert!(!d.verified && !d.wireless);
         assert!(!d.sensor_tracking, "successful sensor reads do not establish safe writes");
         assert!(!d.supports_acceleration && !d.supports_rotation);
-        assert_eq!((d.transaction_id, d.polling, d.polling_rates, d.dpi_max),
-            (0x1f, PollingStyle::Classic, &RATES_CLASSIC[..], 30000));
+        assert_eq!((d.transaction_id, d.polling, d.polling_rates, d.dpi_max), (0x1f, PollingStyle::Classic, &RATES_CLASSIC[..], 30000));
         assert!(matches!(guard_write(&d, false, &cmd::set_polling_rate_classic(1)), Err(HidError::Unverified(_))));
         assert!(guard_write(&d, true, &cmd::set_polling_rate_classic(1)).is_ok());
         let wireless = DeviceSpec::lookup(0x00B7);

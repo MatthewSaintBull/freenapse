@@ -6,7 +6,7 @@ use std::time::Instant;
 
 use windows_sys::Win32::Foundation::{HWND, POINT};
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState;
-use windows_sys::Win32::UI::WindowsAndMessaging::{GetAncestor, GetCursorPos, WindowFromPoint, GA_ROOT};
+use windows_sys::Win32::UI::WindowsAndMessaging::{GA_ROOT, GetAncestor, GetCursorPos, WindowFromPoint};
 
 use crate::macros::Event;
 pub use crate::player::vk_usage;
@@ -124,7 +124,12 @@ mod tests {
 
     #[test]
     fn finish_releases_held_keys() {
-        let mut r = Recorder { events: vec![Event::KeyDown(4), Event::Delay(10), Event::KeyDown(5), Event::KeyUp(4)], started: Instant::now(), last: Instant::now(), down: [false; 256] };
+        let mut r = Recorder {
+            events: vec![Event::KeyDown(4), Event::Delay(10), Event::KeyDown(5), Event::KeyUp(4)],
+            started: Instant::now(),
+            last: Instant::now(),
+            down: [false; 256],
+        };
         r.last = Instant::now();
         let ev = r.finish();
         assert_eq!(ev, vec![Event::KeyDown(4), Event::Delay(10), Event::KeyDown(5), Event::KeyUp(4), Event::KeyUp(5)]);

@@ -65,16 +65,7 @@ pub struct Report {
 
 impl Report {
     pub fn new(transaction_id: u8, command_class: u8, command_id: u8, data_size: u8) -> Report {
-        Report {
-            status: 0,
-            transaction_id,
-            remaining_packets: 0,
-            protocol_type: 0,
-            data_size,
-            command_class,
-            command_id,
-            arguments: [0; 80],
-        }
+        Report { status: 0, transaction_id, remaining_packets: 0, protocol_type: 0, data_size, command_class, command_id, arguments: [0; 80] }
     }
 
     pub fn with_args(mut self, args: &[u8]) -> Report {
@@ -138,29 +129,43 @@ pub fn crc(report: &[u8]) -> u8 {
 pub mod cmd {
     use super::{Report, TID_DONGLE, TID_MOUSE, VARSTORE};
 
-    pub fn firmware_version(tid: u8) -> Report { Report::new(tid, 0x00, 0x81, 0x02) }
-    pub fn serial(tid: u8) -> Report { Report::new(tid, 0x00, 0x82, 0x16) }
-    pub fn get_device_mode() -> Report { Report::new(TID_MOUSE, 0x00, 0x84, 0x02) }
+    pub fn firmware_version(tid: u8) -> Report {
+        Report::new(tid, 0x00, 0x81, 0x02)
+    }
+    pub fn serial(tid: u8) -> Report {
+        Report::new(tid, 0x00, 0x82, 0x16)
+    }
+    pub fn get_device_mode() -> Report {
+        Report::new(TID_MOUSE, 0x00, 0x84, 0x02)
+    }
     /// mode 0x00 = normal, 0x03 = driver mode.
     pub fn set_device_mode(mode: u8) -> Report {
         Report::new(TID_MOUSE, 0x00, 0x04, 0x02).with_args(&[mode, 0x00])
     }
 
-    pub fn get_battery_level() -> Report { Report::new(TID_MOUSE, 0x07, 0x80, 0x02) }
-    pub fn get_charging_status() -> Report { Report::new(TID_MOUSE, 0x07, 0x84, 0x02) }
+    pub fn get_battery_level() -> Report {
+        Report::new(TID_MOUSE, 0x07, 0x80, 0x02)
+    }
+    pub fn get_charging_status() -> Report {
+        Report::new(TID_MOUSE, 0x07, 0x84, 0x02)
+    }
 
     /// Idle timeout before the mouse sleeps, in seconds (60..=900).
     pub fn set_idle_time(seconds: u16) -> Report {
         let s = seconds.clamp(60, 900);
         Report::new(TID_MOUSE, 0x07, 0x03, 0x02).with_args(&s.to_be_bytes())
     }
-    pub fn get_idle_time() -> Report { Report::new(TID_MOUSE, 0x07, 0x83, 0x02) }
+    pub fn get_idle_time() -> Report {
+        Report::new(TID_MOUSE, 0x07, 0x83, 0x02)
+    }
 
     /// Low power mode threshold, percent (5..=100, encoded on 0..=255). The firmware only acts on it at polling rates of 1000 Hz and below.
     pub fn set_low_battery_threshold(percent: u8) -> Report {
         Report::new(TID_MOUSE, 0x07, 0x01, 0x01).with_args(&[percent_to_byte(percent)])
     }
-    pub fn get_low_battery_threshold() -> Report { Report::new(TID_MOUSE, 0x07, 0x81, 0x01) }
+    pub fn get_low_battery_threshold() -> Report {
+        Report::new(TID_MOUSE, 0x07, 0x81, 0x01)
+    }
 
     /// Current DPI (X, Y). Range 100..=35000 on the Viper V3 Pro (Focus Pro 35K).
     pub fn set_dpi_xy(dpi_x: u16, dpi_y: u16) -> Report {
@@ -193,13 +198,17 @@ pub mod cmd {
     pub fn set_polling_rate(hz: u16, argument: u8) -> Report {
         Report::new(TID_MOUSE, 0x00, 0x40, 0x02).with_args(&[argument, polling_code(hz)])
     }
-    pub fn get_polling_rate() -> Report { Report::new(TID_MOUSE, 0x00, 0xC0, 0x01) }
+    pub fn get_polling_rate() -> Report {
+        Report::new(TID_MOUSE, 0x00, 0xC0, 0x01)
+    }
 
     /// Classic polling rate command (mice without the extended one, and the Viper V3 Pro wired).
     pub fn set_polling_rate_classic(code: u8) -> Report {
         Report::new(TID_MOUSE, 0x00, 0x05, 0x01).with_args(&[code])
     }
-    pub fn get_polling_rate_classic() -> Report { Report::new(TID_MOUSE, 0x00, 0x85, 0x01) }
+    pub fn get_polling_rate_classic() -> Report {
+        Report::new(TID_MOUSE, 0x00, 0x85, 0x01)
+    }
 
     /// Codes of the classic command: 1000 Hz = 0x01, 500 = 0x02, 250 = 0x04, 125 = 0x08 (OpenRazer).
     pub fn polling_code_classic(hz: u16) -> Option<u8> {
@@ -226,7 +235,9 @@ pub mod cmd {
     pub fn set_dongle_led_mode(mode: u8) -> Report {
         Report::new(TID_DONGLE, 0x07, 0x10, 0x01).with_args(&[mode.clamp(1, 3)])
     }
-    pub fn get_dongle_led_mode() -> Report { Report::new(TID_DONGLE, 0x07, 0x90, 0x01) }
+    pub fn get_dongle_led_mode() -> Report {
+        Report::new(TID_DONGLE, 0x07, 0x90, 0x01)
+    }
 
     // --- Button mapping (class 0x02), onboard profiles ---
 
@@ -243,17 +254,31 @@ pub mod cmd {
     // --- Onboard profiles (class 0x05) ---
 
     /// How many onboard profiles exist right now.
-    pub fn get_profile_count() -> Report { Report::new(TID_MOUSE, 0x05, 0x80, 0x01) }
+    pub fn get_profile_count() -> Report {
+        Report::new(TID_MOUSE, 0x05, 0x80, 0x01)
+    }
     /// The most profiles the mouse can hold (the Viper V3 Pro answers 1).
-    pub fn get_max_profiles() -> Report { Report::new(TID_MOUSE, 0x05, 0x8a, 0x01) }
+    pub fn get_max_profiles() -> Report {
+        Report::new(TID_MOUSE, 0x05, 0x8a, 0x01)
+    }
     /// Ids of the existing profiles: [count, id, id, ...].
-    pub fn get_profile_list() -> Report { Report::new(TID_MOUSE, 0x05, 0x81, 0x50) }
+    pub fn get_profile_list() -> Report {
+        Report::new(TID_MOUSE, 0x05, 0x81, 0x50)
+    }
     /// Active profile id (the Viper V3 Pro answers Failure: it has a single profile).
-    pub fn get_active_profile() -> Report { Report::new(TID_MOUSE, 0x05, 0x84, 0x01) }
-    pub fn set_active_profile(id: u8) -> Report { Report::new(TID_MOUSE, 0x05, 0x04, 0x01).with_args(&[id]) }
+    pub fn get_active_profile() -> Report {
+        Report::new(TID_MOUSE, 0x05, 0x84, 0x01)
+    }
+    pub fn set_active_profile(id: u8) -> Report {
+        Report::new(TID_MOUSE, 0x05, 0x04, 0x01).with_args(&[id])
+    }
     /// Create / delete an onboard profile slot.
-    pub fn create_profile(id: u8) -> Report { Report::new(TID_MOUSE, 0x05, 0x02, 0x01).with_args(&[id]) }
-    pub fn delete_profile(id: u8) -> Report { Report::new(TID_MOUSE, 0x05, 0x03, 0x01).with_args(&[id]) }
+    pub fn create_profile(id: u8) -> Report {
+        Report::new(TID_MOUSE, 0x05, 0x02, 0x01).with_args(&[id])
+    }
+    pub fn delete_profile(id: u8) -> Report {
+        Report::new(TID_MOUSE, 0x05, 0x03, 0x01).with_args(&[id])
+    }
 
     // --- Dongle pairing (class 0x00), in the order Synapse's pairing flow sends them ---
 
@@ -272,12 +297,20 @@ pub mod cmd {
     pub fn device_scan(tid: u8, mode: u8) -> Report {
         Report::new(tid, 0x00, 0x46, 0x01).with_args(&[mode])
     }
-    pub fn get_auto_pairing(tid: u8) -> Report { Report::new(tid, 0x00, 0xd5, 0x01) }
-    pub fn set_auto_pairing(tid: u8, on: bool) -> Report { Report::new(tid, 0x00, 0x55, 0x01).with_args(&[on as u8]) }
+    pub fn get_auto_pairing(tid: u8) -> Report {
+        Report::new(tid, 0x00, 0xd5, 0x01)
+    }
+    pub fn set_auto_pairing(tid: u8, on: bool) -> Report {
+        Report::new(tid, 0x00, 0x55, 0x01).with_args(&[on as u8])
+    }
     /// Paired devices and their link state: [count, (status, pid hi, pid lo)...].
-    pub fn get_paired_devices(tid: u8) -> Report { Report::new(tid, 0x00, 0xbf, 0x50) }
+    pub fn get_paired_devices(tid: u8) -> Report {
+        Report::new(tid, 0x00, 0xbf, 0x50)
+    }
     /// Wireless link state of the device (1 byte).
-    pub fn get_wireless_connection_status(tid: u8) -> Report { Report::new(tid, 0x00, 0xb8, 0x01) }
+    pub fn get_wireless_connection_status(tid: u8) -> Report {
+        Report::new(tid, 0x00, 0xb8, 0x01)
+    }
 
     pub fn polling_code(hz: u16) -> u8 {
         match hz {
@@ -369,5 +402,4 @@ mod tests {
         assert_eq!(cmd::byte_to_percent(0x3f), 25);
         assert_eq!(cmd::byte_to_percent(0x0c), 5);
     }
-
 }

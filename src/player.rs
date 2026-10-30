@@ -24,58 +24,58 @@ pub const VK_F24: u16 = 0x87;
 /// Keyboard HID usage of a Windows virtual key (US layout for the punctuation keys).
 pub fn vk_usage(vk: u16) -> Option<u8> {
     Some(match vk {
-        0x41..=0x5a => 0x04 + (vk - 0x41) as u8,            // A..Z
-        0x31..=0x39 => 0x1e + (vk - 0x31) as u8,            // 1..9
-        0x30 => 0x27,                                       // 0
-        0x0d => 0x28,                                       // Enter
+        0x41..=0x5a => 0x04 + (vk - 0x41) as u8, // A..Z
+        0x31..=0x39 => 0x1e + (vk - 0x31) as u8, // 1..9
+        0x30 => 0x27,                            // 0
+        0x0d => 0x28,                            // Enter
         0x1b => 0x29,
-        0x08 => 0x2a,                                       // Backspace
-        0x09 => 0x2b,                                       // Tab
-        0x20 => 0x2c,                                       // Space
-        0xbd => 0x2d,                                       // -
-        0xbb => 0x2e,                                       // =
-        0xdb => 0x2f,                                       // [
-        0xdd => 0x30,                                       // ]
-        0xdc => 0x31,                                       // backslash
-        0xba => 0x33,                                       // ;
-        0xde => 0x34,                                       // '
-        0xc0 => 0x35,                                       // `
-        0xbc => 0x36,                                       // ,
-        0xbe => 0x37,                                       // .
-        0xbf => 0x38,                                       // /
-        0x14 => 0x39,                                       // Caps lock
-        0x70..=0x7b => 0x3a + (vk - 0x70) as u8,            // F1..F12
-        0x7c..=0x87 => 0x68 + (vk - 0x7c) as u8,            // F13..F24
-        0x2c => 0x46,                                       // Print screen
-        0x91 => 0x47,                                       // Scroll lock
-        0x13 => 0x48,                                       // Pause
-        0x2d => 0x49,                                       // Insert
-        0x24 => 0x4a,                                       // Home
-        0x21 => 0x4b,                                       // Page up
-        0x2e => 0x4c,                                       // Delete
-        0x23 => 0x4d,                                       // End
-        0x22 => 0x4e,                                       // Page down
-        0x27 => 0x4f,                                       // Right
-        0x25 => 0x50,                                       // Left
-        0x28 => 0x51,                                       // Down
-        0x26 => 0x52,                                       // Up
-        0x90 => 0x53,                                       // Num lock
-        0x6f => 0x54,                                       // keypad /
-        0x6a => 0x55,                                       // keypad *
-        0x6d => 0x56,                                       // keypad -
-        0x6b => 0x57,                                       // keypad +
-        0x61..=0x69 => 0x59 + (vk - 0x61) as u8,            // keypad 1..9
-        0x60 => 0x62,                                       // keypad 0
-        0x6e => 0x63,                                       // keypad .
-        0xa2 => 0xe0,                                       // left ctrl
-        0xa0 => 0xe1,                                       // left shift
-        0xa4 => 0xe2,                                       // left alt
-        0x5b => 0xe3,                                       // left win
-        0xa3 => 0xe4,                                       // right ctrl
-        0xa1 => 0xe5,                                       // right shift
-        0xa5 => 0xe6,                                       // right alt
-        0x5c => 0xe7,                                       // right win
-        _ => return None,                                   // 0x10/0x11/0x12 (generic shift/ctrl/alt) are covered by the sided keys
+        0x08 => 0x2a,                            // Backspace
+        0x09 => 0x2b,                            // Tab
+        0x20 => 0x2c,                            // Space
+        0xbd => 0x2d,                            // -
+        0xbb => 0x2e,                            // =
+        0xdb => 0x2f,                            // [
+        0xdd => 0x30,                            // ]
+        0xdc => 0x31,                            // backslash
+        0xba => 0x33,                            // ;
+        0xde => 0x34,                            // '
+        0xc0 => 0x35,                            // `
+        0xbc => 0x36,                            // ,
+        0xbe => 0x37,                            // .
+        0xbf => 0x38,                            // /
+        0x14 => 0x39,                            // Caps lock
+        0x70..=0x7b => 0x3a + (vk - 0x70) as u8, // F1..F12
+        0x7c..=0x87 => 0x68 + (vk - 0x7c) as u8, // F13..F24
+        0x2c => 0x46,                            // Print screen
+        0x91 => 0x47,                            // Scroll lock
+        0x13 => 0x48,                            // Pause
+        0x2d => 0x49,                            // Insert
+        0x24 => 0x4a,                            // Home
+        0x21 => 0x4b,                            // Page up
+        0x2e => 0x4c,                            // Delete
+        0x23 => 0x4d,                            // End
+        0x22 => 0x4e,                            // Page down
+        0x27 => 0x4f,                            // Right
+        0x25 => 0x50,                            // Left
+        0x28 => 0x51,                            // Down
+        0x26 => 0x52,                            // Up
+        0x90 => 0x53,                            // Num lock
+        0x6f => 0x54,                            // keypad /
+        0x6a => 0x55,                            // keypad *
+        0x6d => 0x56,                            // keypad -
+        0x6b => 0x57,                            // keypad +
+        0x61..=0x69 => 0x59 + (vk - 0x61) as u8, // keypad 1..9
+        0x60 => 0x62,                            // keypad 0
+        0x6e => 0x63,                            // keypad .
+        0xa2 => 0xe0,                            // left ctrl
+        0xa0 => 0xe1,                            // left shift
+        0xa4 => 0xe2,                            // left alt
+        0x5b => 0xe3,                            // left win
+        0xa3 => 0xe4,                            // right ctrl
+        0xa1 => 0xe5,                            // right shift
+        0xa5 => 0xe6,                            // right alt
+        0x5c => 0xe7,                            // right win
+        _ => return None,                        // 0x10/0x11/0x12 (generic shift/ctrl/alt) are covered by the sided keys
     })
 }
 

@@ -122,7 +122,7 @@ check_updates = true
 # events = ["press:r", "delay:80", "press:space"]
 "#;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(default)]
 pub struct Config {
     pub device: DeviceConfig,
@@ -222,7 +222,9 @@ pub struct ProfileConfig {
 }
 
 impl Default for ProfileConfig {
-    fn default() -> Self { ProfileConfig { active: 1 } }
+    fn default() -> Self {
+        ProfileConfig { active: 1 }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -292,30 +294,15 @@ pub struct TrayConfig {
     pub check_updates: bool,
 }
 
-impl Default for Config {
+impl Default for DpiConfig {
     fn default() -> Self {
-        Config {
-            device: DeviceConfig::default(),
-            dpi: DpiConfig::default(),
-            polling: PollingConfig::default(),
-            power: PowerConfig::default(),
-            sensor: SensorConfig::default(),
-            acceleration: AccelConfig::default(),
-            dongle: DongleConfig::default(),
-            profile: ProfileConfig::default(),
-            buttons: BTreeMap::new(),
-            tray: TrayConfig::default(),
-            games: Vec::new(),
-            macros: Vec::new(),
-        }
+        DpiConfig { stages: vec![400, 800, 1600, 3200, 6400], active: 2, y_stages: vec![] }
     }
 }
-
-impl Default for DpiConfig {
-    fn default() -> Self { DpiConfig { stages: vec![400, 800, 1600, 3200, 6400], active: 2, y_stages: vec![] } }
-}
 impl Default for AccelConfig {
-    fn default() -> Self { AccelConfig { enabled: false, mode: "classic".into(), curve: Mode::Classic.template() } }
+    fn default() -> Self {
+        AccelConfig { enabled: false, mode: "classic".into(), curve: Mode::Classic.template() }
+    }
 }
 
 impl AccelConfig {
@@ -329,10 +316,14 @@ impl AccelConfig {
     }
 }
 impl Default for PollingConfig {
-    fn default() -> Self { PollingConfig { rate: 1000, game_rate: 8000, games: vec![] } }
+    fn default() -> Self {
+        PollingConfig { rate: 1000, game_rate: 8000, games: vec![] }
+    }
 }
 impl Default for PowerConfig {
-    fn default() -> Self { PowerConfig { idle_seconds: 300, low_battery_percent: 15 } }
+    fn default() -> Self {
+        PowerConfig { idle_seconds: 300, low_battery_percent: 15 }
+    }
 }
 impl Default for SensorConfig {
     fn default() -> Self {
@@ -340,10 +331,14 @@ impl Default for SensorConfig {
     }
 }
 impl Default for DongleConfig {
-    fn default() -> Self { DongleConfig { led: 1 } }
+    fn default() -> Self {
+        DongleConfig { led: 1 }
+    }
 }
 impl Default for TrayConfig {
-    fn default() -> Self { TrayConfig { poll_seconds: 60, notify_percent: 15, check_updates: true } }
+    fn default() -> Self {
+        TrayConfig { poll_seconds: 60, notify_percent: 15, check_updates: true }
+    }
 }
 
 impl Config {
@@ -499,7 +494,7 @@ impl Config {
 
     /// A button bound to a macro must point at a macro of this config.
     fn check_macro_ref(&self, spec: &str) -> Result<(), String> {
-        if let Some(Some(f)) = parse_button(spec).ok() {
+        if let Ok(Some(f)) = parse_button(spec) {
             if let Some((id, _)) = f.macro_binding() {
                 if !self.macros.iter().any(|m| m.id == id) {
                     return Err(format!("button assignment '{spec}' refers to macro {id}, which is not in [[macros]]"));
@@ -532,12 +527,24 @@ impl Config {
     }
 
     fn overrides(&self, g: &GameConfig) -> GameOverrides {
-        GameOverrides { key: g.key(), name: g.label(), polling: g.polling.unwrap_or(self.polling.game_rate), dpi_stage: g.dpi_stage, buttons: g.buttons.clone() }
+        GameOverrides {
+            key: g.key(),
+            name: g.label(),
+            polling: g.polling.unwrap_or(self.polling.game_rate),
+            dpi_stage: g.dpi_stage,
+            buttons: g.buttons.clone(),
+        }
     }
 
     /// An entry of the old `polling.games` list: in-game polling rate only.
     fn legacy_overrides(&self, exe: &str) -> GameOverrides {
-        GameOverrides { key: format!("polling:{}", exe.to_lowercase()), name: exe.to_string(), polling: self.polling.game_rate, dpi_stage: None, buttons: BTreeMap::new() }
+        GameOverrides {
+            key: format!("polling:{}", exe.to_lowercase()),
+            name: exe.to_string(),
+            polling: self.polling.game_rate,
+            dpi_stage: None,
+            buttons: BTreeMap::new(),
+        }
     }
 
     /// The macro with this id.
@@ -1000,8 +1007,29 @@ pub fn spec_for(f: &ButtonFunction) -> Option<String> {
 /// Key name for a keyboard HID usage, the inverse of [`hid_usage`].
 pub fn usage_name(usage: u8) -> Option<String> {
     const NAMED: [&str; 23] = [
-        "enter", "esc", "backspace", "tab", "space", "capslock", "printscreen", "scrolllock", "pause", "insert", "home",
-        "pageup", "delete", "end", "pagedown", "right", "left", "down", "up", "numlock", "-", "=", "[",
+        "enter",
+        "esc",
+        "backspace",
+        "tab",
+        "space",
+        "capslock",
+        "printscreen",
+        "scrolllock",
+        "pause",
+        "insert",
+        "home",
+        "pageup",
+        "delete",
+        "end",
+        "pagedown",
+        "right",
+        "left",
+        "down",
+        "up",
+        "numlock",
+        "-",
+        "=",
+        "[",
     ];
     let mut candidates: Vec<String> = (b'a'..=b'z').map(|c| (c as char).to_string()).collect();
     candidates.extend((b'0'..=b'9').map(|c| (c as char).to_string()));
@@ -1132,8 +1160,20 @@ mod tests {
     #[test]
     fn spec_roundtrip() {
         for spec in [
-            "disabled", "mouse:back", "key:ctrl+shift+f5", "key:space", "media:mute", "dpi-up", "dpi-stage:4", "hypershift",
-            "double-click", "turbo:left:10", "turbo-key:ctrl+c:8", "system:sleep", "system:power", "system:wake",
+            "disabled",
+            "mouse:back",
+            "key:ctrl+shift+f5",
+            "key:space",
+            "media:mute",
+            "dpi-up",
+            "dpi-stage:4",
+            "hypershift",
+            "double-click",
+            "turbo:left:10",
+            "turbo-key:ctrl+c:8",
+            "system:sleep",
+            "system:power",
+            "system:wake",
         ] {
             let f = parse_button(spec).unwrap().unwrap();
             assert_eq!(spec_for(&f).as_deref(), Some(spec), "{spec}");
@@ -1168,7 +1208,12 @@ mod tests {
         g.buttons.insert("back".into(), "macro-held:2".into());
         c.games.push(g);
         c.games.push(GameConfig { exe: "valorant.exe".into(), ..Default::default() });
-        c.games.push(GameConfig { name: "Rocket League®".into(), dir: "C:\\Steam\\steamapps\\common\\rocketleague".into(), polling: Some(2000), ..Default::default() });
+        c.games.push(GameConfig {
+            name: "Rocket League®".into(),
+            dir: "C:\\Steam\\steamapps\\common\\rocketleague".into(),
+            polling: Some(2000),
+            ..Default::default()
+        });
         c.games.push(GameConfig { name: "It's \"quoted\"".into(), exe: "q.exe".into(), ..Default::default() });
         let text = c.render();
         let back: Config = toml::from_str(&text).unwrap();

@@ -60,7 +60,10 @@ pub fn install_panic_hook(gui: bool) {
         eprint!("{report}");
         if gui {
             let where_ = if written { format!("Details were written to\n{}", path.display()) } else { "The crash report could not be written.".to_string() };
-            let text = format!("freenapse {} stopped because of an internal error:\n\n{message}\n\n{where_}\n\nPlease paste that file into an issue at\nhttps://github.com/MatthewSaintBull/freenapse/issues", crate::VERSION);
+            let text = format!(
+                "freenapse {} stopped because of an internal error:\n\n{message}\n\n{where_}\n\nPlease paste that file into an issue at\nhttps://github.com/MatthewSaintBull/freenapse/issues",
+                crate::VERSION
+            );
             message_box("freenapse stopped", &text);
         }
     }));
@@ -116,7 +119,9 @@ fn windows_version() -> String {
         let name: Vec<u16> = name.encode_utf16().chain(Some(0)).collect();
         let mut buf = [0u16; 128];
         let mut size = (buf.len() * 2) as u32;
-        let rc = unsafe { RegGetValueW(HKEY_LOCAL_MACHINE, key.as_ptr(), name.as_ptr(), RRF_RT_REG_SZ, std::ptr::null_mut(), buf.as_mut_ptr() as *mut _, &mut size) };
+        let rc = unsafe {
+            RegGetValueW(HKEY_LOCAL_MACHINE, key.as_ptr(), name.as_ptr(), RRF_RT_REG_SZ, std::ptr::null_mut(), buf.as_mut_ptr() as *mut _, &mut size)
+        };
         if rc != 0 {
             return String::new();
         }

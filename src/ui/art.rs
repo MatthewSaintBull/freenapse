@@ -9,7 +9,11 @@ use std::ptr;
 use std::sync::OnceLock;
 
 use windows_sys::Win32::Graphics::Gdi::{DeleteObject, HBITMAP};
-use windows_sys::Win32::Graphics::GdiPlus::{self as gp, GdipCreateBitmapFromFile, GdipCreateBitmapFromScan0, GdipCreateHBITMAPFromBitmap, GdipDeleteGraphics, GdipDisposeImage, GdipDrawImageRectI, GdipGetImageGraphicsContext, GdipGetImageHeight, GdipGetImageWidth, GdipSetInterpolationMode, GdiplusStartup, GdiplusStartupInput, GpBitmap, GpGraphics, GpImage, InterpolationModeHighQualityBicubic};
+use windows_sys::Win32::Graphics::GdiPlus::{
+    self as gp, GdipCreateBitmapFromFile, GdipCreateBitmapFromScan0, GdipCreateHBITMAPFromBitmap, GdipDeleteGraphics, GdipDisposeImage, GdipDrawImageRectI,
+    GdipGetImageGraphicsContext, GdipGetImageHeight, GdipGetImageWidth, GdipSetInterpolationMode, GdiplusStartup, GdiplusStartupInput, GpBitmap, GpGraphics,
+    GpImage, InterpolationModeHighQualityBicubic,
+};
 use windows_sys::Win32::UI::Shell::SHDefExtractIconW;
 use windows_sys::Win32::UI::WindowsAndMessaging::{DestroyIcon, HICON};
 
@@ -109,7 +113,8 @@ pub fn exe_icon(path: &str, size: i32) -> Option<ExeIcon> {
 /// The game's own program in an install folder: the largest .exe in the
 /// folder or one level below it, skipping installers, crash handlers and redistributables.
 pub fn guess_exe(dir: &str) -> Option<String> {
-    const SKIP: [&str; 12] = ["unins", "crash", "redist", "setup", "vcredist", "vc_redist", "dxsetup", "dotnet", "report", "installer", "easyanticheat", "cleanup"];
+    const SKIP: [&str; 12] =
+        ["unins", "crash", "redist", "setup", "vcredist", "vc_redist", "dxsetup", "dotnet", "report", "installer", "easyanticheat", "cleanup"];
     let mut best: Option<(bool, u64, String)> = None;
     let mut consider = |p: std::path::PathBuf| {
         let name = p.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();

@@ -235,7 +235,17 @@ impl HidDevice {
             use std::io::Write;
             if let Ok(mut f) = std::fs::OpenOptions::new().append(true).create(true).open(p) {
                 let ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() % 100_000).unwrap_or(0);
-                let _ = writeln!(f, "{:>5} {:?} tid {:02x} {:02x}/{:02x} {} ms {}", ms, std::thread::current().id(), request.transaction_id, request.command_class, request.command_id, t0.elapsed().as_millis(), if r.is_ok() { "ok" } else { "ERR" });
+                let _ = writeln!(
+                    f,
+                    "{:>5} {:?} tid {:02x} {:02x}/{:02x} {} ms {}",
+                    ms,
+                    std::thread::current().id(),
+                    request.transaction_id,
+                    request.command_class,
+                    request.command_id,
+                    t0.elapsed().as_millis(),
+                    if r.is_ok() { "ok" } else { "ERR" }
+                );
             }
         }
         r

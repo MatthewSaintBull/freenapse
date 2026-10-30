@@ -121,7 +121,8 @@ pub fn run(mouse: &Mouse, show_serials: bool) -> Vec<String> {
     p.read_masked("dongle serial", cmd::serial(TID_DONGLE), &|r| Some(ascii(&r.arguments[..22])), !show_serials);
     p.read("dongle paired list", cmd::get_paired_devices(TID_DONGLE), &|r| {
         let n = (r.arguments[0] as usize).min(8);
-        let items: Vec<String> = (0..n).map(|i| format!("pid {:02x}{:02x} state {}", r.arguments[2 + 3 * i], r.arguments[3 + 3 * i], r.arguments[1 + 3 * i])).collect();
+        let items: Vec<String> =
+            (0..n).map(|i| format!("pid {:02x}{:02x} state {}", r.arguments[2 + 3 * i], r.arguments[3 + 3 * i], r.arguments[1 + 3 * i])).collect();
         Some(format!("{n} slots: {}", items.join(", ")))
     });
     p.blank();
@@ -154,7 +155,11 @@ pub fn run(mouse: &Mouse, show_serials: bool) -> Vec<String> {
         Some(code.map(|hz| format!("{hz} Hz")).unwrap_or_else(|| "code not in the 8000=01..125=40 table".into()))
     });
     let cl = p.read("polling classic", cmd::get_polling_rate_classic(), &|r| {
-        Some(cmd::polling_from_code_classic(r.arguments[0]).map(|hz| format!("{hz} Hz")).unwrap_or_else(|| "code not in the 1000=01 500=02 250=04 125=08 table".into()))
+        Some(
+            cmd::polling_from_code_classic(r.arguments[0])
+                .map(|hz| format!("{hz} Hz"))
+                .unwrap_or_else(|| "code not in the 1000=01 500=02 250=04 125=08 table".into()),
+        )
     });
     p.out.push(note(match (hp.is_some(), cl.is_some()) {
         (true, true) => "both polling commands answered: the table row should say which one Synapse uses",
@@ -181,7 +186,9 @@ pub fn run(mouse: &Mouse, show_serials: bool) -> Vec<String> {
     p.read("sensor state", sensor::get_state(), &|r| Some(format!("calibration data in use: {}", r.arguments[2] != 0)));
     p.read("sensor lift", sensor::get_lift(), &|r| Some(format!("lift mode {} height {}", r.arguments[2], r.arguments[3])));
     p.read("sensor config", sensor::get_config(), &|_| None);
-    p.read("sensor angle", sensor::get_angle(), &|r| Some(format!("rotation {}: {} deg", if r.arguments[1] != 0 { "on" } else { "off" }, r.arguments[2] as i8)));
+    p.read("sensor angle", sensor::get_angle(), &|r| {
+        Some(format!("rotation {}: {} deg", if r.arguments[1] != 0 { "on" } else { "off" }, r.arguments[2] as i8))
+    });
     p.read("accel state", crate::accel::get_state(1), &|r| Some(format!("dynamic sensitivity {}", if r.arguments[1] != 0 { "on" } else { "off" })));
     p.read("button left", cmd::get_button_function(1, 0x01, false), &|r| Some(format!("function {}", hex(&r.arguments[3..10], 7))));
 

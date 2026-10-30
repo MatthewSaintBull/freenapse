@@ -5,6 +5,8 @@
 //! RT_ICON images and the RT_GROUP_ICON directory, plus the ADDR32NB
 //! relocations the linker needs to turn data offsets into RVAs.
 
+#![allow(clippy::collapsible_if)]
+
 use std::env;
 use std::fs;
 use std::path::Path;
@@ -12,6 +14,9 @@ use std::path::Path;
 const RT_ICON: u32 = 3;
 const RT_GROUP_ICON: u32 = 14;
 const LANG_NEUTRAL: u32 = 0x0409;
+
+/// (width, height, bit count, image bytes) of one entry of the .ico file.
+type IcoImage = (u8, u8, u16, Vec<u8>);
 
 fn main() {
     let ico = Path::new("assets/freenapse.ico");
@@ -26,7 +31,7 @@ fn main() {
 }
 
 /// (width, height, bit count, image bytes) for each entry of the .ico file.
-fn parse_ico(d: &[u8]) -> Option<Vec<(u8, u8, u16, Vec<u8>)>> {
+fn parse_ico(d: &[u8]) -> Option<Vec<IcoImage>> {
     let u16le = |o: usize| u16::from_le_bytes([d[o], d[o + 1]]);
     let u32le = |o: usize| u32::from_le_bytes([d[o], d[o + 1], d[o + 2], d[o + 3]]);
     if d.len() < 6 || u16le(0) != 0 || u16le(2) != 1 {
@@ -53,7 +58,7 @@ enum Node {
 }
 
 /// Lay the resource tree out and produce the COFF object.
-fn rsrc_object(images: &[(u8, u8, u16, Vec<u8>)]) -> Vec<u8> {
+fn rsrc_object(images: &[IcoImage]) -> Vec<u8> {
     // GRPICONDIR: the icon group pointing at RT_ICON ids 1..n.
     let mut group = Vec::new();
     group.extend_from_slice(&0u16.to_le_bytes());
@@ -66,7 +71,13 @@ fn rsrc_object(images: &[(u8, u8, u16, Vec<u8>)]) -> Vec<u8> {
         group.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
         group.extend_from_slice(&((i + 1) as u16).to_le_bytes());
     }
-    let icons = Dir { entries: images.iter().enumerate().map(|(i, im)| ((i + 1) as u32, Node::Dir(Dir { entries: vec![(LANG_NEUTRAL, Node::Data(im.3.clone()))] }))).collect() };
+    let icons = Dir {
+        entries: images
+            .iter()
+            .enumerate()
+            .map(|(i, im)| ((i + 1) as u32, Node::Dir(Dir { entries: vec![(LANG_NEUTRAL, Node::Data(im.3.clone()))] })))
+            .collect(),
+    };
     let groups = Dir { entries: vec![(1, Node::Dir(Dir { entries: vec![(LANG_NEUTRAL, Node::Data(group))] }))] };
     let root = Dir { entries: vec![(RT_ICON, Node::Dir(icons)), (RT_GROUP_ICON, Node::Dir(groups))] };
 
@@ -94,7 +105,7 @@ fn rsrc_object(images: &[(u8, u8, u16, Vec<u8>)]) -> Vec<u8> {
     emit(&root, &dirs, &dir_offsets, &mut dir_i, &mut data_i, &mut section, &mut data_entries, &mut blobs, &mut relocs, data_entries_at, blobs_at);
     section.extend_from_slice(&data_entries);
     section.extend_from_slice(&blobs);
-    while section.len() % 4 != 0 {
+    while !section.len().is_multiple_of(4) {
         section.push(0);
     }
 
@@ -146,7 +157,13 @@ fn collect<'a>(d: &'a Dir, out: &mut Vec<&'a Dir>) {
 }
 
 fn count_data(d: &Dir) -> usize {
-    d.entries.iter().map(|(_, n)| match n { Node::Dir(s) => count_data(s), Node::Data(_) => 1 }).sum()
+    d.entries
+        .iter()
+        .map(|(_, n)| match n {
+            Node::Dir(s) => count_data(s),
+            Node::Data(_) => 1,
+        })
+        .sum()
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -195,7 +212,7 @@ fn emit(
                 data_entries.extend_from_slice(&0u32.to_le_bytes());
                 relocs.push(entry_at);
                 blobs.extend_from_slice(bytes);
-                while blobs.len() % 8 != 0 {
+                while !blobs.len().is_multiple_of(8) {
                     blobs.push(0);
                 }
             }

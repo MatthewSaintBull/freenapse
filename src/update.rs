@@ -89,7 +89,14 @@ pub fn fetch_latest_tag() -> Result<String, String> {
         }
         let mut status = 0u32;
         let mut size = std::mem::size_of::<u32>() as u32;
-        WinHttpQueryHeaders(req.0, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, ptr::null(), &mut status as *mut u32 as *mut c_void, &mut size, ptr::null_mut());
+        WinHttpQueryHeaders(
+            req.0,
+            WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+            ptr::null(),
+            &mut status as *mut u32 as *mut c_void,
+            &mut size,
+            ptr::null_mut(),
+        );
         if status != 200 {
             return Err(format!("GitHub answered HTTP {status}"));
         }

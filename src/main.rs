@@ -3,6 +3,7 @@
 //! started from.
 
 #![windows_subsystem = "windows"]
+#![allow(clippy::collapsible_if, clippy::collapsible_match)]
 
 use std::process::ExitCode;
 
@@ -184,8 +185,7 @@ fn run(cmd: &str, args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         }
         "stages" => {
             let active: u8 = arg(args, 0, "active stage")?;
-            let stages: Vec<(u16, u16)> =
-                args[1..].iter().map(|s| s.parse::<u16>().map(|d| (d, d))).collect::<Result<_, _>>()?;
+            let stages: Vec<(u16, u16)> = args[1..].iter().map(|s| s.parse::<u16>().map(|d| (d, d))).collect::<Result<_, _>>()?;
             if stages.is_empty() || stages.len() > 5 {
                 return Err("give 1 to 5 DPI values".into());
             }
@@ -291,7 +291,12 @@ fn run(cmd: &str, args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         }
         "pair" | "pair-cancel" | "unpair" => {
             let yes = args.iter().any(|a| a == "--yes");
-            let pid = args.iter().find(|a| !a.starts_with("--")).map(|s| u16::from_str_radix(s.trim_start_matches("0x"), 16)).transpose()?.unwrap_or(mouse.spec().product_id);
+            let pid = args
+                .iter()
+                .find(|a| !a.starts_with("--"))
+                .map(|s| u16::from_str_radix(s.trim_start_matches("0x"), 16))
+                .transpose()?
+                .unwrap_or(mouse.spec().product_id);
             match cmd {
                 "pair" => {
                     let mode = mouse.start_pairing(pid)?;
@@ -345,16 +350,13 @@ fn run(cmd: &str, args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
                 Some("-d") | Some("--dongle") => (freenapse::protocol::TID_DONGLE, &args[1..]),
                 _ => (TID_MOUSE, args),
             };
-            let bytes: Vec<u8> = args
-                .iter()
-                .map(|s| u8::from_str_radix(s.trim_start_matches("0x"), 16))
-                .collect::<Result<_, _>>()?;
+            let bytes: Vec<u8> = args.iter().map(|s| u8::from_str_radix(s.trim_start_matches("0x"), 16)).collect::<Result<_, _>>()?;
             if bytes.len() < 3 {
                 return Err("raw [-d] <class> <id> <size> [args..]".into());
             }
             let req = Report::new(tid, bytes[0], bytes[1], bytes[2]).with_args(&bytes[3..]);
             let r = mouse.raw(&req)?;
-            let n = (r.data_size as usize).max(8).min(80);
+            let n = (r.data_size as usize).clamp(8, 80);
             println!("status={:02x} size={} args={:02x?}", r.status, r.data_size, &r.arguments[..n]);
         }
         "sensor-dump" => {
@@ -405,10 +407,10 @@ fn status(mouse: &Mouse) -> Result<(), Box<dyn std::error::Error>> {
     };
     println!("device:       {} (product id 0x{:04x}){trust}", spec.name, spec.product_id);
     println!("connection:   {}", if mouse.is_wireless() { "wireless (through the dongle)" } else { "wired" });
-    if mouse.is_wireless() {
-        if let Ok((a, b)) = mouse.dongle_firmware() {
-            println!("dongle:       fw {a}.{b}  serial {}", mouse.dongle_serial().unwrap_or_default());
-        }
+    if mouse.is_wireless()
+        && let Ok((a, b)) = mouse.dongle_firmware()
+    {
+        println!("dongle:       fw {a}.{b}  serial {}", mouse.dongle_serial().unwrap_or_default());
     }
     match mouse.firmware() {
         Ok((a, b)) => println!("mouse:        fw {a}.{b}  serial {}", mouse.serial().unwrap_or_default()),
@@ -447,4 +449,3 @@ fn status(mouse: &Mouse) -> Result<(), Box<dyn std::error::Error>> {
     }
     Ok(())
 }
-

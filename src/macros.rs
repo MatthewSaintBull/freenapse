@@ -50,16 +50,8 @@ pub const EV_DELAY_4: u8 = 0x14;
 pub const EV_CURSOR: u8 = 0x15;
 
 /// Keyboard usages of the modifier keys (usage page 7, 0xe0..0xe7).
-pub const MODIFIER_USAGES: [(&str, u8); 8] = [
-    ("ctrl", 0xe0),
-    ("shift", 0xe1),
-    ("alt", 0xe2),
-    ("win", 0xe3),
-    ("rctrl", 0xe4),
-    ("rshift", 0xe5),
-    ("ralt", 0xe6),
-    ("rwin", 0xe7),
-];
+pub const MODIFIER_USAGES: [(&str, u8); 8] =
+    [("ctrl", 0xe0), ("shift", 0xe1), ("alt", 0xe2), ("win", 0xe3), ("rctrl", 0xe4), ("rshift", 0xe5), ("ralt", 0xe6), ("rwin", 0xe7)];
 
 /// One recorded step of a macro.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -453,13 +445,23 @@ pub fn name_from_structure(s: &[u8]) -> String {
 // ---------------------------------------------------------------------------
 
 /// Storage info: [maxId u16, maxMemory u32, available u32, recyclable u32].
-pub fn get_storage_info() -> Report { Report::new(TID_MOUSE, CLASS, 0x8e, 0x0e) }
+pub fn get_storage_info() -> Report {
+    Report::new(TID_MOUSE, CLASS, 0x8e, 0x0e)
+}
 /// Number of stored macros (u16).
-pub fn get_count() -> Report { Report::new(TID_MOUSE, CLASS, 0x80, 0x02) }
+pub fn get_count() -> Report {
+    Report::new(TID_MOUSE, CLASS, 0x80, 0x02)
+}
 /// Ids of the stored macros: [offset u16, count u16, id u16...].
-pub fn get_id_list() -> Report { Report::new(TID_MOUSE, CLASS, 0x81, 0x50) }
-pub fn create(id: u16) -> Report { Report::new(TID_MOUSE, CLASS, 0x02, 0x02).with_args(&id.to_be_bytes()) }
-pub fn delete(id: u16) -> Report { Report::new(TID_MOUSE, CLASS, 0x03, 0x02).with_args(&id.to_be_bytes()) }
+pub fn get_id_list() -> Report {
+    Report::new(TID_MOUSE, CLASS, 0x81, 0x50)
+}
+pub fn create(id: u16) -> Report {
+    Report::new(TID_MOUSE, CLASS, 0x02, 0x02).with_args(&id.to_be_bytes())
+}
+pub fn delete(id: u16) -> Report {
+    Report::new(TID_MOUSE, CLASS, 0x03, 0x02).with_args(&id.to_be_bytes())
+}
 /// Reserve `size` bytes of event data for the macro.
 pub fn allocate(id: u16, size: u32) -> Report {
     let mut a = id.to_be_bytes().to_vec();
@@ -467,7 +469,9 @@ pub fn allocate(id: u16, size: u32) -> Report {
     Report::new(TID_MOUSE, CLASS, 0x08, 0x06).with_args(&a)
 }
 /// Stored size of the macro's event data: [id u16, size u32].
-pub fn get_data_size(id: u16) -> Report { Report::new(TID_MOUSE, CLASS, 0x88, 0x06).with_args(&id.to_be_bytes()) }
+pub fn get_data_size(id: u16) -> Report {
+    Report::new(TID_MOUSE, CLASS, 0x88, 0x06).with_args(&id.to_be_bytes())
+}
 /// One chunk of the name structure: [id, offset u16, total u16, bytes...].
 pub fn set_name_chunk(id: u16, offset: u16, total: u16, chunk: &[u8]) -> Report {
     let mut a = id.to_be_bytes().to_vec();
@@ -504,13 +508,21 @@ mod tests {
 
     #[test]
     fn parse_and_encode() {
-        let ev = parse_events(&["press:a".into(), "delay:50".into(), "delay:300".into(), "click:left".into(), "scroll:down".into(), "down:ctrl".into(), "up:ctrl".into(), "move:-3,4".into()].to_vec()).unwrap();
+        let ev = parse_events(&[
+            "press:a".into(),
+            "delay:50".into(),
+            "delay:300".into(),
+            "click:left".into(),
+            "scroll:down".into(),
+            "down:ctrl".into(),
+            "up:ctrl".into(),
+            "move:-3,4".into(),
+        ])
+        .unwrap();
         let bytes = encode(&ev);
         assert_eq!(
             bytes,
-            vec![
-                0x01, 0x04, 0x02, 0x04, 0x11, 50, 0x12, 0x01, 0x2c, 0x08, 0x01, 0x08, 0x00, 0x0a, 0xff, 0x01, 0xe0, 0x02, 0xe0, 0x15, 0xff, 0xfd, 0x00, 0x04
-            ]
+            vec![0x01, 0x04, 0x02, 0x04, 0x11, 50, 0x12, 0x01, 0x2c, 0x08, 0x01, 0x08, 0x00, 0x0a, 0xff, 0x01, 0xe0, 0x02, 0xe0, 0x15, 0xff, 0xfd, 0x00, 0x04]
         );
         assert_eq!(decode(&bytes), ev);
         assert_eq!(event_specs(&ev), ["press:a", "delay:50", "delay:300", "click:left", "scroll:down", "press:ctrl", "move:-3,4"]);

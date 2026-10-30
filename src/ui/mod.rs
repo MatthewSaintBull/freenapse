@@ -318,30 +318,91 @@ pub enum FontKind {
 pub enum Kind {
     Card,
     Line,
-    Text { text: String, font: FontKind, color: u32, flags: u32 },
-    Toggle { on: bool },
+    Text {
+        text: String,
+        font: FontKind,
+        color: u32,
+        flags: u32,
+    },
+    Toggle {
+        on: bool,
+    },
     /// Segmented control. `xs` are the option spans relative to `rect.left`.
-    Chips { options: Vec<String>, selected: Option<usize>, xs: Vec<(i32, i32)> },
-    Slider { min: i32, max: i32, step: i32, value: i32, fmt: fn(i32) -> String, ticks: Vec<String>, show_value: bool, enabled: bool },
-    Button { text: String, primary: bool, enabled: bool, icon: Option<Icon> },
-    Edit { text: String, numeric: bool },
-    Radio { on: bool, text: String },
+    Chips {
+        options: Vec<String>,
+        selected: Option<usize>,
+        xs: Vec<(i32, i32)>,
+    },
+    Slider {
+        min: i32,
+        max: i32,
+        step: i32,
+        value: i32,
+        fmt: fn(i32) -> String,
+        ticks: Vec<String>,
+        show_value: bool,
+        enabled: bool,
+    },
+    Button {
+        text: String,
+        primary: bool,
+        enabled: bool,
+        icon: Option<Icon>,
+    },
+    Edit {
+        text: String,
+        numeric: bool,
+    },
+    Radio {
+        on: bool,
+        text: String,
+    },
     /// A selectable list row (button list on the Customize page).
-    Row { title: String, sub: String, selected: bool },
+    Row {
+        title: String,
+        sub: String,
+        selected: bool,
+    },
     Battery,
-    MouseArt { highlight: usize, regions: Vec<(usize, RECT)> },
+    MouseArt {
+        highlight: usize,
+        regions: Vec<(usize, RECT)>,
+    },
     /// Sidebar entry for a page.
-    Nav { label: String, icon: Icon, selected: bool },
+    Nav {
+        label: String,
+        icon: Icon,
+        selected: bool,
+    },
     /// Game tile with its cover art, name and launcher badge.
-    Tile { title: String, sub: String, badge: &'static str, art: TileArt, selected: bool },
+    Tile {
+        title: String,
+        sub: String,
+        badge: &'static str,
+        art: TileArt,
+        selected: bool,
+    },
     /// A standalone icon glyph.
-    Icon { icon: Icon, color: u32 },
+    Icon {
+        icon: Icon,
+        color: u32,
+    },
     /// Small coloured pill with a caps label (feature status on the Roadmap page).
-    Badge { text: String, color: u32 },
+    Badge {
+        text: String,
+        color: u32,
+    },
     /// Bullet dot in front of a roadmap item.
-    Bullet { color: u32 },
+    Bullet {
+        color: u32,
+    },
     /// Dynamic Sensitivity plot: control points, the 250 samples, and whether the points can be dragged.
-    Curve { points: Vec<(u8, f32)>, samples: Vec<f32>, editable: bool, selected: Option<usize> },
+    Curve {
+        points: Vec<(u8, f32)>,
+        samples: Vec<f32>,
+        editable: bool,
+        selected: Option<usize>,
+    },
 }
 
 /// Where a game tile's picture comes from.
@@ -531,6 +592,9 @@ static OPENING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::n
 
 /// Open the settings window, or bring the open one forward. The window runs on
 /// its own thread, so the tray app's device reads never hold up painting or clicks.
+///
+/// # Safety
+/// `owner` must be the tray's window handle: the window posts its messages to it.
 pub unsafe fn open(owner: HWND) {
     let existing = FindWindowExW(0, 0, wide(CLASS_NAME).as_ptr(), ptr::null());
     if existing != 0 {
@@ -567,7 +631,7 @@ unsafe fn create(owner: HWND) -> HWND {
         hInstance: hinstance,
         hIcon: {
             // Resource 1 is the icon embedded by build.rs; fall back to the stock one.
-            let own = LoadIconW(hinstance, 1 as *const u16);
+            let own = LoadIconW(hinstance, std::ptr::without_provenance::<u16>(1));
             if own != 0 { own } else { LoadIconW(0, IDI_APPLICATION) }
         },
         hCursor: LoadCursorW(0, IDC_ARROW),
@@ -970,7 +1034,8 @@ impl Ui {
     fn read_details(&mut self, ident: bool, pair: bool) {
         self.io(move |dev| {
             let Ok(m) = dev.mouse() else { return Box::new(|ui: &mut Ui| ui.reading = false) };
-            let ident = ident.then(|| (m.firmware().ok(), m.dongle_firmware().ok(), m.serial().ok(), m.profiles().ok(), m.macro_storage().ok(), m.macro_support().ok()));
+            let ident = ident
+                .then(|| (m.firmware().ok(), m.dongle_firmware().ok(), m.serial().ok(), m.profiles().ok(), m.macro_storage().ok(), m.macro_support().ok()));
             let paired = if pair && m.is_wireless() { Some(m.paired_devices().ok()) } else { None };
             let auto = if paired.is_some() { dev.auto_pairing() } else { None };
             Box::new(move |ui: &mut Ui| {
@@ -1311,7 +1376,17 @@ impl Ui {
         let fy = h - s(FOOTER_H);
         fill(dc, &rect(left, fy, w - left, s(FOOTER_H)), PANEL);
         let (msg, color, ic) = match &self.status {
-            Some((m, c, _)) => (m.clone(), *c, if *c == ERR { Icon::Warning } else if *c == WARN { Icon::Info } else { Icon::Check }),
+            Some((m, c, _)) => (
+                m.clone(),
+                *c,
+                if *c == ERR {
+                    Icon::Warning
+                } else if *c == WARN {
+                    Icon::Info
+                } else {
+                    Icon::Check
+                },
+            ),
             None if self.pending => ("Changes pending: move the mouse to wake it up".to_string(), WARN, Icon::Info),
             None => return,
         };
@@ -1356,7 +1431,13 @@ impl Ui {
             (true, false) => match (self.fw, self.dongle_fw) {
                 (Some((a, b)), Some((c, d))) => format!("fw {a}.{b}  ·  dongle {c}.{d}"),
                 (Some((a, b)), None) => format!("Firmware {a}.{b}"),
-                _ => if self.wireless { "HyperSpeed wireless".to_string() } else { "Wired".to_string() },
+                _ => {
+                    if self.wireless {
+                        "HyperSpeed wireless".to_string()
+                    } else {
+                        "Wired".to_string()
+                    }
+                }
             },
         };
         text(dc, &rect(cr.left + s(16), cr.top + s(32), cr.right - cr.left - s(32), s(16)), &sub, self.fonts.small, MUTED, DT_ROW);
@@ -1376,7 +1457,14 @@ impl Ui {
         if fw > 0 {
             round(dc, &rect(bar.left, bar.top, fw, s(4)), s(2), Some(bcol), None);
         }
-        text(dc, &rect(bar.right, by - s(6), lw - s(2), s(16)), &label, self.fonts.caps, if pct > 0 { TEXT } else { DIM }, DT_VCENTER_ | DT_SINGLELINE_ | DT_NOPREFIX_ | 2);
+        text(
+            dc,
+            &rect(bar.right, by - s(6), lw - s(2), s(16)),
+            &label,
+            self.fonts.caps,
+            if pct > 0 { TEXT } else { DIM },
+            DT_VCENTER_ | DT_SINGLELINE_ | DT_NOPREFIX_ | 2,
+        );
     }
 
     /// True while the EDIT box behind this widget has the keyboard focus.
@@ -1444,7 +1532,14 @@ impl Ui {
                         fill(dc, &rect(x, cy + s(8), s(1), s(4)), TRACK);
                         let active = i as i32 == *value - *min;
                         let tw = text_width(dc, self.fonts.small, t);
-                        text(dc, &rect(x - tw / 2 - s(4), cy + s(14), tw + s(8), s(16)), t, if active { self.fonts.caps } else { self.fonts.small }, if active { TEXT } else { DIM }, DT_MID);
+                        text(
+                            dc,
+                            &rect(x - tw / 2 - s(4), cy + s(14), tw + s(8), s(16)),
+                            t,
+                            if active { self.fonts.caps } else { self.fonts.small },
+                            if active { TEXT } else { DIM },
+                            DT_MID,
+                        );
                     }
                 }
             }
@@ -1459,11 +1554,29 @@ impl Ui {
                         DIM
                     }
                     (true, true) => {
-                        round(dc, r, radius, Some(if pressed { ACCENT_DK } else if hot { ACCENT_HI } else { ACCENT }), None);
+                        round(
+                            dc,
+                            r,
+                            radius,
+                            Some(if pressed {
+                                ACCENT_DK
+                            } else if hot {
+                                ACCENT_HI
+                            } else {
+                                ACCENT
+                            }),
+                            None,
+                        );
                         ON_ACCENT
                     }
                     (true, false) => {
-                        let (bg, fg) = if pressed { (FIELD, MUTED) } else if hot { (FIELD_HI, TEXT) } else { (FIELD, TEXT) };
+                        let (bg, fg) = if pressed {
+                            (FIELD, MUTED)
+                        } else if hot {
+                            (FIELD_HI, TEXT)
+                        } else {
+                            (FIELD, TEXT)
+                        };
                         glass(dc, r, radius, mix(WHITE, bg, 0.03), bg, TRACK, 0);
                         if destructive { ERR } else { fg }
                     }
@@ -1496,7 +1609,14 @@ impl Ui {
                 } else {
                     circle(dc, cx, cy, s(9), Some(if hot { FIELD_HI } else { FIELD }), Some((if hot { MUTED } else { TRACK }, s(1))));
                 }
-                text(dc, &rect(r.left + s(28), r.top, r.right - r.left - s(28), r.bottom - r.top), t, if *on { self.fonts.bold } else { self.fonts.body }, TEXT, DT_ROW);
+                text(
+                    dc,
+                    &rect(r.left + s(28), r.top, r.right - r.left - s(28), r.bottom - r.top),
+                    t,
+                    if *on { self.fonts.bold } else { self.fonts.body },
+                    TEXT,
+                    DT_ROW,
+                );
             }
             Kind::Row { title, sub, selected } => {
                 // A selectable list row: subtle fill on hover, fill plus the 3 px accent indicator when selected.
@@ -1524,7 +1644,14 @@ impl Ui {
                 }
                 let color = if *selected || hot { TEXT } else { MUTED };
                 icon(dc, self.fonts.icon, r.left + s(20), (r.top + r.bottom) / 2, *ic, color);
-                text(dc, &rect(r.left + s(40), r.top, r.right - r.left - s(44), r.bottom - r.top), label, if *selected { self.fonts.bold } else { self.fonts.body }, color, DT_ROW);
+                text(
+                    dc,
+                    &rect(r.left + s(40), r.top, r.right - r.left - s(44), r.bottom - r.top),
+                    label,
+                    if *selected { self.fonts.bold } else { self.fonts.body },
+                    color,
+                    DT_ROW,
+                );
             }
             Kind::Tile { title, sub, badge, art, selected } => self.draw_tile(dc, r, title, sub, badge, art, *selected, hot),
             Kind::Badge { text: t, color } => {
@@ -1601,7 +1728,13 @@ impl Ui {
                         }
                         None => {
                             // Up to two initials.
-                            let initials: String = title.split_whitespace().filter_map(|p| p.chars().next()).filter(|c| c.is_alphanumeric()).take(2).collect::<String>().to_uppercase();
+                            let initials: String = title
+                                .split_whitespace()
+                                .filter_map(|p| p.chars().next())
+                                .filter(|c| c.is_alphanumeric())
+                                .take(2)
+                                .collect::<String>()
+                                .to_uppercase();
                             text(dc, &rect(r.left, r.top + h * 36 / 100 - s(24), w, s(48)), &initials, self.fonts.big, mix(WHITE, top, 0.85), DT_MID);
                         }
                     }
@@ -1665,10 +1798,15 @@ impl Ui {
         let Kind::Curve { points, .. } = &wgt.kind else { return None };
         let plot = self.curve_plot(&wgt.rect);
         let r2 = self.s(10) * self.s(10);
-        points.iter().enumerate().rev().find(|(_, (sx, sy))| {
-            let (px, py) = self.curve_px(&plot, *sx as f32, *sy);
-            (px - x) * (px - x) + (py - y) * (py - y) <= r2
-        }).map(|(i, _)| i)
+        points
+            .iter()
+            .enumerate()
+            .rev()
+            .find(|(_, (sx, sy))| {
+                let (px, py) = self.curve_px(&plot, *sx as f32, *sy);
+                (px - x) * (px - x) + (py - y) * (py - y) <= r2
+            })
+            .map(|(i, _)| i)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1682,7 +1820,14 @@ impl Ui {
             fill(dc, &rect(x, plot.top, s(1), plot.bottom - plot.top), LINE);
             let label = format!("{}", i * 15);
             let tw = text_width(dc, self.fonts.small, &label);
-            text(dc, &rect(x - tw / 2 - s(4), plot.bottom + s(4), tw + s(8), s(18)), &label, self.fonts.small, MUTED, DT_CENTER_ | DT_VCENTER_ | DT_SINGLELINE_ | DT_NOPREFIX_);
+            text(
+                dc,
+                &rect(x - tw / 2 - s(4), plot.bottom + s(4), tw + s(8), s(18)),
+                &label,
+                self.fonts.small,
+                MUTED,
+                DT_CENTER_ | DT_VCENTER_ | DT_SINGLELINE_ | DT_NOPREFIX_,
+            );
         }
         for i in 0..=6 {
             let m = i as f32 * 0.25;
@@ -1712,7 +1857,8 @@ impl Ui {
             let mut pt = POINT { x: 0, y: 0 };
             GetCursorPos(&mut pt);
             ScreenToClient(self.hwnd, &mut pt);
-            let probe = Widget { id: Id::Curve, rect: *r, kind: Kind::Curve { points: points.to_vec(), samples: Vec::new(), editable, selected }, fixed: false };
+            let probe =
+                Widget { id: Id::Curve, rect: *r, kind: Kind::Curve { points: points.to_vec(), samples: Vec::new(), editable, selected }, fixed: false };
             self.curve_point_at(&probe, pt.x, pt.y)
         } else {
             None
@@ -1813,7 +1959,13 @@ impl Ui {
             if !wgt.interactive() {
                 continue;
             }
-            let (px, py) = if wgt.fixed { (x, y) } else if in_view { (x, y - top + self.scroll) } else { continue };
+            let (px, py) = if wgt.fixed {
+                (x, y)
+            } else if in_view {
+                (x, y - top + self.scroll)
+            } else {
+                continue;
+            };
             if contains(&wgt.rect, px, py) {
                 return Some(i);
             }
@@ -2193,9 +2345,9 @@ impl Ui {
                 self.exe_guess.insert(g.dir.clone(), guess);
             }
             if let Some(p) = self.exe_path_of(&g) {
-                if !self.exe_icons.contains_key(&p) {
-                    let ic = art::exe_icon(&p, ICON_PX);
-                    self.exe_icons.insert(p, ic);
+                if let std::collections::hash_map::Entry::Vacant(e) = self.exe_icons.entry(p) {
+                    let ic = art::exe_icon(e.key(), ICON_PX);
+                    e.insert(ic);
                 }
             }
         }
@@ -2466,11 +2618,8 @@ impl Ui {
                 if gap < 2 {
                     return;
                 }
-                let (x, y) = if at == c.len() {
-                    (last + gap / 2, c.last().map(|p| p.1).unwrap_or(1.0))
-                } else {
-                    (c[at - 1].0 + gap / 2, (c[at - 1].1 + c[at].1) / 2.0)
-                };
+                let (x, y) =
+                    if at == c.len() { (last + gap / 2, c.last().map(|p| p.1).unwrap_or(1.0)) } else { (c[at - 1].0 + gap / 2, (c[at - 1].1 + c[at].1) / 2.0) };
                 c.insert(at, (x, (y * 100.0).round() / 100.0));
                 self.curve_sel = Some(at);
                 Write::Accel
@@ -2549,7 +2698,13 @@ impl Ui {
                 let Some(i) = self.sel_macro.filter(|i| *i < self.cfg.macros.len()) else { return };
                 let id = self.cfg.macros[i].id;
                 // Buttons bound to it go back to their default.
-                let bound: Vec<String> = self.cfg.buttons.iter().filter(|(_, s)| parse_button(s).ok().flatten().and_then(|f| f.macro_binding()).map(|(m, _)| m) == Some(id)).map(|(k, _)| k.clone()).collect();
+                let bound: Vec<String> = self
+                    .cfg
+                    .buttons
+                    .iter()
+                    .filter(|(_, s)| parse_button(s).ok().flatten().and_then(|f| f.macro_binding()).map(|(m, _)| m) == Some(id))
+                    .map(|(k, _)| k.clone())
+                    .collect();
                 for k in &bound {
                     self.cfg.buttons.remove(k);
                 }
@@ -2989,7 +3144,14 @@ impl Ui {
     }
 
     /// Back on the window's thread after a write: status line, pending state, the tray app.
-    unsafe fn write_done(&mut self, write: Write, result: Result<(), HidError>, paired: Option<Option<Vec<PairedDevice>>>, auto: Option<bool>, storage: Option<MacroStorage>) {
+    unsafe fn write_done(
+        &mut self,
+        write: Write,
+        result: Result<(), HidError>,
+        paired: Option<Option<Vec<PairedDevice>>>,
+        auto: Option<bool>,
+        storage: Option<MacroStorage>,
+    ) {
         if let Write::Pair(act) = write {
             if result.is_ok() {
                 self.pairing_since = if act == PairAct::Start { Some(Instant::now()) } else { None };
@@ -3013,7 +3175,13 @@ impl Ui {
                     Write::Accel => "Dynamic Sensitivity saved to the mouse",
                     Write::Profile => "Onboard profile selected and the config written to it",
                     Write::Button(..) => "Button assignment saved to the mouse",
-                    Write::Macro(_) => if self.macro_onboard == Some(true) { "Macro stored in the mouse" } else { "Macro saved; the tray app plays it when its button is pressed" },
+                    Write::Macro(_) => {
+                        if self.macro_onboard == Some(true) {
+                            "Macro stored in the mouse"
+                        } else {
+                            "Macro saved; the tray app plays it when its button is pressed"
+                        }
+                    }
                     Write::MacroDelete(_) => "Macro deleted",
                     Write::Pair(PairAct::Start) => "Dongle in pairing mode: switch the mouse off and on next to it",
                     Write::Pair(PairAct::Cancel) => "Pairing mode cancelled",
@@ -3134,7 +3302,6 @@ impl Ui {
             })
         });
     }
-
 }
 
 // Helpers used by the page builders.

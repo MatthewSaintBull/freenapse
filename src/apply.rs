@@ -88,8 +88,7 @@ pub fn import(mouse: &Mouse) -> Result<Config> {
 
     if cfg.validate().is_err() {
         // Something odd on the mouse: keep the parts that validate on their own.
-        let mut safe = Config::default();
-        safe.dpi = cfg.dpi.clone();
+        let mut safe = Config { dpi: cfg.dpi.clone(), ..Default::default() };
         safe.polling.rate = cfg.polling.rate;
         if safe.validate().is_err() {
             safe = Config::default();

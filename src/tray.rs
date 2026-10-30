@@ -12,9 +12,7 @@ use std::time::Instant;
 use windows_sys::Win32::Foundation::*;
 use windows_sys::Win32::Graphics::Gdi::*;
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
-use windows_sys::Win32::System::Threading::{
-    CreateMutexW, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
-};
+use windows_sys::Win32::System::Threading::{CreateMutexW, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW};
 use windows_sys::Win32::UI::HiDpi::{DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetProcessDpiAwarenessContext};
 use windows_sys::Win32::UI::Shell::*;
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
@@ -155,20 +153,7 @@ pub fn run(open_settings: bool) {
         });
         let app_ptr = Box::into_raw(app);
 
-        let hwnd = CreateWindowExW(
-            0,
-            class_name.as_ptr(),
-            wide("freenapse").as_ptr(),
-            0,
-            0,
-            0,
-            0,
-            0,
-            HWND_MESSAGE,
-            0,
-            hinstance,
-            app_ptr as *const c_void,
-        );
+        let hwnd = CreateWindowExW(0, class_name.as_ptr(), wide("freenapse").as_ptr(), 0, 0, 0, 0, 0, HWND_MESSAGE, 0, hinstance, app_ptr as *const c_void);
         if hwnd == 0 {
             return;
         }
@@ -1075,7 +1060,13 @@ unsafe fn make_battery_icon(battery: Option<Battery>, connected: bool) -> HICON 
             let fill = (inner_w * b.percent as i32 / 100).max(if b.percent > 0 { scale } else { 0 });
             c.rect(x0 + scale, y1 - 3 * scale, x0 + scale + fill, y1 - scale, color);
             // Percentage digits, centred in the upper area.
-            let digits: Vec<u8> = if b.percent >= 100 { vec![1, 0, 0] } else if b.percent >= 10 { vec![b.percent / 10, b.percent % 10] } else { vec![b.percent] };
+            let digits: Vec<u8> = if b.percent >= 100 {
+                vec![1, 0, 0]
+            } else if b.percent >= 10 {
+                vec![b.percent / 10, b.percent % 10]
+            } else {
+                vec![b.percent]
+            };
             let text_w = (digits.len() as i32 * 4 - 1) * scale;
             let mut x = x0 + (x1 - x0 - text_w) / 2;
             let y = y0 + 2 * scale;
@@ -1100,7 +1091,7 @@ unsafe fn canvas_to_icon(c: &Canvas) -> HICON {
     bmi.bmiHeader.biHeight = -c.h;
     bmi.bmiHeader.biPlanes = 1;
     bmi.bmiHeader.biBitCount = 32;
-    bmi.bmiHeader.biCompression = BI_RGB as u32;
+    bmi.bmiHeader.biCompression = BI_RGB;
     let mut bits: *mut c_void = ptr::null_mut();
     let color = CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, &mut bits, 0, 0);
     ReleaseDC(0, hdc);

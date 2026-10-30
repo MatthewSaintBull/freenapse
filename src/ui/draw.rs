@@ -470,11 +470,7 @@ pub unsafe fn clip_polygon(dc: HDC, pts: &[POINT], f: impl FnOnce()) {
 pub unsafe fn reflection(dc: HDC, r: &RECT, alpha: u8) {
     let w = r.right - r.left;
     let h = r.bottom - r.top;
-    let band = [
-        POINT { x: r.left, y: r.top },
-        POINT { x: r.left + w * 70 / 100, y: r.top },
-        POINT { x: r.left, y: r.top + h * 50 / 100 },
-    ];
+    let band = [POINT { x: r.left, y: r.top }, POINT { x: r.left + w * 70 / 100, y: r.top }, POINT { x: r.left, y: r.top + h * 50 / 100 }];
     clip_polygon(dc, &band, || alpha_vgradient(dc, &rect(r.left, r.top, w, h / 2), theme::WHITE, alpha, 0));
 }
 

@@ -42,7 +42,17 @@ pub struct Form {
 
 impl Form {
     pub fn new(scale: f32, dc: HDC, fonts: &Fonts, x: i32, w: i32) -> Form {
-        Form { scale, dc, body: fonts.body, x: (x as f32 / scale) as i32, w: (w as f32 / scale) as i32, y: 24, widgets: Vec::new(), card: None, last_divider: None }
+        Form {
+            scale,
+            dc,
+            body: fonts.body,
+            x: (x as f32 / scale) as i32,
+            w: (w as f32 / scale) as i32,
+            y: 24,
+            widgets: Vec::new(),
+            card: None,
+            last_divider: None,
+        }
     }
 
     /// Right edge of the content inside a card.
@@ -89,7 +99,14 @@ impl Form {
         self.card = Some((self.widgets.len(), self.y));
         self.widgets.push(Widget { id: Id::None, rect: rect(0, 0, 0, 0), kind: Kind::Card, fixed: false });
         self.y += 12;
-        self.push(Id::None, self.x + PAD, self.y, self.w - 2 * PAD, 24, Kind::Text { text: title.to_string(), font: FontKind::Bold, color: TEXT, flags: DT_ROW });
+        self.push(
+            Id::None,
+            self.x + PAD,
+            self.y,
+            self.w - 2 * PAD,
+            24,
+            Kind::Text { text: title.to_string(), font: FontKind::Bold, color: TEXT, flags: DT_ROW },
+        );
         self.y += 28;
     }
 
@@ -139,10 +156,31 @@ impl Form {
             ROW_H_SUB + 16 * (lines - 1)
         };
         if sub.is_empty() {
-            self.push(Id::None, self.x + PAD, self.y, LABEL_W - 10, h, Kind::Text { text: title.to_string(), font: FontKind::Bold, color: TEXT, flags: DT_ROW });
+            self.push(
+                Id::None,
+                self.x + PAD,
+                self.y,
+                LABEL_W - 10,
+                h,
+                Kind::Text { text: title.to_string(), font: FontKind::Bold, color: TEXT, flags: DT_ROW },
+            );
         } else {
-            self.push(Id::None, self.x + PAD, self.y + 12, LABEL_W - 16, 20, Kind::Text { text: title.to_string(), font: FontKind::Bold, color: TEXT, flags: DT_ROW });
-            self.push(Id::None, self.x + PAD, self.y + 32, LABEL_W - 16, h - 40, Kind::Text { text: sub.to_string(), font: FontKind::Small, color: MUTED, flags: DT_LEFT_ | DT_WORDBREAK_ | DT_NOPREFIX_ | DT_END_ELLIPSIS_ });
+            self.push(
+                Id::None,
+                self.x + PAD,
+                self.y + 12,
+                LABEL_W - 16,
+                20,
+                Kind::Text { text: title.to_string(), font: FontKind::Bold, color: TEXT, flags: DT_ROW },
+            );
+            self.push(
+                Id::None,
+                self.x + PAD,
+                self.y + 32,
+                LABEL_W - 16,
+                h - 40,
+                Kind::Text { text: sub.to_string(), font: FontKind::Small, color: MUTED, flags: DT_LEFT_ | DT_WORDBREAK_ | DT_NOPREFIX_ | DT_END_ELLIPSIS_ },
+            );
         }
         self.divider(self.y + h - 1);
         h
@@ -153,7 +191,14 @@ impl Form {
         let w = (self.w - 2 * PAD).min(560);
         let lines = (self.measure(self.body, text) / w.max(1) + 1).clamp(1, 4);
         let h = 16 * lines + 12;
-        self.push(Id::None, self.x + PAD, self.y, w, h, Kind::Text { text: text.to_string(), font: FontKind::Small, color: MUTED, flags: DT_LEFT_ | DT_WORDBREAK_ | DT_NOPREFIX_ });
+        self.push(
+            Id::None,
+            self.x + PAD,
+            self.y,
+            w,
+            h,
+            Kind::Text { text: text.to_string(), font: FontKind::Small, color: MUTED, flags: DT_LEFT_ | DT_WORDBREAK_ | DT_NOPREFIX_ },
+        );
         self.y += h;
     }
 
@@ -194,7 +239,14 @@ impl Form {
     /// Chips spanning the whole card width, with the title on its own line (for long option lists).
     pub fn chips_wide(&mut self, title: &str, options: &[String], selected: Option<usize>, id: Id) {
         if !title.is_empty() {
-            self.push(Id::None, self.x + PAD, self.y, self.w - 2 * PAD, 24, Kind::Text { text: title.to_string(), font: FontKind::Bold, color: TEXT, flags: DT_ROW });
+            self.push(
+                Id::None,
+                self.x + PAD,
+                self.y,
+                self.w - 2 * PAD,
+                24,
+                Kind::Text { text: title.to_string(), font: FontKind::Bold, color: TEXT, flags: DT_ROW },
+            );
             self.y += 28;
         }
         let (xs, _) = self.chip_spans(options);
@@ -211,14 +263,28 @@ impl Form {
     #[allow(clippy::too_many_arguments)]
     pub fn slider_opt(&mut self, title: &str, sub: &str, min: i32, max: i32, step: i32, value: i32, fmt: fn(i32) -> String, id: Id, enabled: bool) {
         let h = self.label(title, sub);
-        self.push(id, self.cx(), self.y, self.cw(), h, Kind::Slider { min, max, step, value: value.clamp(min, max), fmt, ticks: Vec::new(), show_value: true, enabled });
+        self.push(
+            id,
+            self.cx(),
+            self.y,
+            self.cw(),
+            h,
+            Kind::Slider { min, max, step, value: value.clamp(min, max), fmt, ticks: Vec::new(), show_value: true, enabled },
+        );
         self.y += h;
     }
 
     /// Warning line in amber with its icon, e.g. why a control above is greyed out.
     pub fn warning(&mut self, text: &str) {
         self.push(Id::None, self.x + PAD, self.y + 4, 16, 16, Kind::Icon { icon: Icon::Warning, color: WARN });
-        self.push(Id::None, self.x + PAD + 24, self.y, self.w - 2 * PAD - 24, 24, Kind::Text { text: text.to_string(), font: FontKind::Small, color: WARN, flags: DT_ROW });
+        self.push(
+            Id::None,
+            self.x + PAD + 24,
+            self.y,
+            self.w - 2 * PAD - 24,
+            24,
+            Kind::Text { text: text.to_string(), font: FontKind::Small, color: WARN, flags: DT_ROW },
+        );
         self.y += 28;
     }
 
@@ -226,7 +292,23 @@ impl Form {
     pub fn ticks(&mut self, title: &str, sub: &str, labels: &[String], selected: usize, id: Id) {
         let h = self.label(title, sub).max(64);
         let n = labels.len().max(1) as i32;
-        self.push(id, self.cx(), self.y, self.cw(), h, Kind::Slider { min: 0, max: n - 1, step: 1, value: (selected as i32).min(n - 1), fmt: |v| v.to_string(), ticks: labels.to_vec(), show_value: false, enabled: true });
+        self.push(
+            id,
+            self.cx(),
+            self.y,
+            self.cw(),
+            h,
+            Kind::Slider {
+                min: 0,
+                max: n - 1,
+                step: 1,
+                value: (selected as i32).min(n - 1),
+                fmt: |v| v.to_string(),
+                ticks: labels.to_vec(),
+                show_value: false,
+                enabled: true,
+            },
+        );
         self.y += h;
     }
 
@@ -245,7 +327,14 @@ impl Form {
         self.dpi_controls(Id::StageValue(i), dpi, h, dpi_max);
         self.y += h;
         if let Some(yd) = y {
-            self.push(Id::None, self.x + PAD + 28, self.y, LABEL_W - 38, h, Kind::Text { text: "Y".to_string(), font: FontKind::Body, color: MUTED, flags: DT_ROW });
+            self.push(
+                Id::None,
+                self.x + PAD + 28,
+                self.y,
+                LABEL_W - 38,
+                h,
+                Kind::Text { text: "Y".to_string(), font: FontKind::Body, color: MUTED, flags: DT_ROW },
+            );
             self.dpi_controls(Id::StageY(i), yd, h, dpi_max);
             self.y += h;
         }
@@ -254,7 +343,23 @@ impl Form {
 
     fn dpi_controls(&mut self, id: Id, dpi: u16, h: i32, dpi_max: u16) {
         let edit_w = 88;
-        self.push(id, self.cx(), self.y, self.cw() - edit_w - 16, h, Kind::Slider { min: 100, max: dpi_max as i32, step: 50, value: dpi as i32, fmt: |v| v.to_string(), ticks: Vec::new(), show_value: false, enabled: true });
+        self.push(
+            id,
+            self.cx(),
+            self.y,
+            self.cw() - edit_w - 16,
+            h,
+            Kind::Slider {
+                min: 100,
+                max: dpi_max as i32,
+                step: 50,
+                value: dpi as i32,
+                fmt: |v| v.to_string(),
+                ticks: Vec::new(),
+                show_value: false,
+                enabled: true,
+            },
+        );
         self.push(id, self.right() - edit_w, self.y + (h - BUTTON_H) / 2, edit_w, BUTTON_H, Kind::Edit { text: dpi.to_string(), numeric: true });
     }
 
@@ -313,7 +418,14 @@ impl Form {
         let title_w = LABEL_W - badge_w - 36;
         self.push(Id::None, title_x, self.y, title_w, h, Kind::Text { text: title.to_string(), font: FontKind::Bold, color: TEXT, flags: DT_ROW });
         let note_x = title_x + title_w + 12;
-        self.push(Id::None, note_x, self.y, (self.x + self.w - PAD - note_x).max(40), h, Kind::Text { text: note.to_string(), font: FontKind::Small, color: MUTED, flags: DT_ROW });
+        self.push(
+            Id::None,
+            note_x,
+            self.y,
+            (self.x + self.w - PAD - note_x).max(40),
+            h,
+            Kind::Text { text: note.to_string(), font: FontKind::Small, color: MUTED, flags: DT_ROW },
+        );
         self.divider(self.y + h - 1);
         self.y += h;
     }
@@ -324,7 +436,14 @@ impl Form {
         let lines = (self.measure(self.body, text) / w.max(1) + 1).clamp(1, 4);
         let h = 20 * lines + 8;
         self.push(Id::None, self.x + PAD + 4, self.y + 4, 12, 20, Kind::Bullet { color });
-        self.push(Id::None, self.x + PAD + 24, self.y + 4, w, h - 4, Kind::Text { text: text.to_string(), font: FontKind::Body, color: TEXT, flags: DT_LEFT_ | DT_WORDBREAK_ | DT_NOPREFIX_ });
+        self.push(
+            Id::None,
+            self.x + PAD + 24,
+            self.y + 4,
+            w,
+            h - 4,
+            Kind::Text { text: text.to_string(), font: FontKind::Body, color: TEXT, flags: DT_LEFT_ | DT_WORDBREAK_ | DT_NOPREFIX_ },
+        );
         self.y += h;
     }
 }
@@ -599,13 +718,21 @@ fn game_settings(ui: &Ui, f: &mut Form, g: &crate::config::GameConfig, rates: &[
     let psel = g.polling.and_then(|p| rates.iter().position(|r| *r == p)).map(|i| i + 1).unwrap_or(0);
     f.chips_wide("Polling rate while playing", &polls, Some(psel), Id::GamePolling);
     f.edit("Name", "Shown here and in the tray tooltip. Press Enter to save", &g.label(), false, Id::GameName);
-    let exe_sub = if g.dir.is_empty() { "Executable name, e.g. cs2.exe. Press Enter to save" } else { "Optional: every program in the game's folder already counts" };
+    let exe_sub =
+        if g.dir.is_empty() { "Executable name, e.g. cs2.exe. Press Enter to save" } else { "Optional: every program in the game's folder already counts" };
     f.edit("Program", exe_sub, &g.exe, false, Id::GameExe);
     if !g.dir.is_empty() {
         f.info("Folder", &g.dir);
     }
     let n = g.buttons.len();
-    f.info("Buttons", &if n == 0 { "same as the Normal layout".to_string() } else { format!("{n} assignment{} of its own, the rest as in the Normal layout", if n == 1 { "" } else { "s" }) });
+    f.info(
+        "Buttons",
+        &if n == 0 {
+            "same as the Normal layout".to_string()
+        } else {
+            format!("{n} assignment{} of its own, the rest as in the Normal layout", if n == 1 { "" } else { "s" })
+        },
+    );
     f.buttons(&[("Edit button layout", Id::GameButtons, true), ("Remove profile", Id::GameRemove, false)]);
 }
 
@@ -622,8 +749,26 @@ fn calibration(ui: &Ui, f: &mut Form) {
     }
     f.toggle("Asymmetric cut-off", "Separate lift-off and landing levels instead of one distance", s.asymmetric, Id::Asym);
     if s.asymmetric {
-        f.slider("Lift-off", "Tracking stops at this level (low to high)", ASYM_LIFT_MIN as i32, ASYM_LIFT_MAX as i32, 1, s.lift as i32, |v| v.to_string(), Id::Lift);
-        f.slider("Landing", "Tracking resumes at this level, below the lift-off", ASYM_LAND_MIN as i32, (s.lift as i32 - 1).max(ASYM_LAND_MIN as i32), 1, s.land as i32, |v| v.to_string(), Id::Land);
+        f.slider(
+            "Lift-off",
+            "Tracking stops at this level (low to high)",
+            ASYM_LIFT_MIN as i32,
+            ASYM_LIFT_MAX as i32,
+            1,
+            s.lift as i32,
+            |v| v.to_string(),
+            Id::Lift,
+        );
+        f.slider(
+            "Landing",
+            "Tracking resumes at this level, below the lift-off",
+            ASYM_LAND_MIN as i32,
+            (s.lift as i32 - 1).max(ASYM_LAND_MIN as i32),
+            1,
+            s.land as i32,
+            |v| v.to_string(),
+            Id::Land,
+        );
         f.note("Same sliders as Synapse's Asymmetric Cut-off for the Viper V3 Pro (lift-off 2..26, landing 1..25, Synapse's defaults 13 / 12). The mouse accepts the values but cannot read them back, so they are rewritten on every apply.");
     } else {
         f.slider("Lift-off distance", "1 mm is the lowest the sensor supports", 1, 3, 1, s.lift as i32, |v| format!("{v} mm"), Id::Lift);
@@ -635,13 +780,41 @@ fn power(ui: &Ui, f: &mut Form) {
     let cfg = &ui.cfg;
     f.section_icon("Battery", Some(Icon::Battery));
     f.battery();
-    f.slider("Battery notification", "The tray app pops a notification at this level", 5, 50, 1, cfg.tray.notify_percent as i32, |v| format!("{v} %"), Id::NotifyPercent);
+    f.slider(
+        "Battery notification",
+        "The tray app pops a notification at this level",
+        5,
+        50,
+        1,
+        cfg.tray.notify_percent as i32,
+        |v| format!("{v} %"),
+        Id::NotifyPercent,
+    );
 
     f.section_icon("Power saving", Some(Icon::Power));
-    f.slider("Idle sleep", "Sleep after this much inactivity (wakes on the first movement)", 1, 15, 1, (cfg.power.idle_seconds / 60) as i32, |v| if v == 1 { "1 minute".to_string() } else { format!("{v} minutes") }, Id::Idle);
+    f.slider(
+        "Idle sleep",
+        "Sleep after this much inactivity (wakes on the first movement)",
+        1,
+        15,
+        1,
+        (cfg.power.idle_seconds / 60) as i32,
+        |v| if v == 1 { "1 minute".to_string() } else { format!("{v} minutes") },
+        Id::Idle,
+    );
     // Same rule as Synapse: the firmware only honours low power mode at 1000 Hz or less.
     let lpm_ok = cfg.polling.rate <= 1000;
-    f.slider_opt("Low power mode", "When wireless, the mouse enters low power mode once the battery is below this level", 5, 100, 5, cfg.power.low_battery_percent as i32, |v| format!("{v} %"), Id::LowBattery, lpm_ok);
+    f.slider_opt(
+        "Low power mode",
+        "When wireless, the mouse enters low power mode once the battery is below this level",
+        5,
+        100,
+        5,
+        cfg.power.low_battery_percent as i32,
+        |v| format!("{v} %"),
+        Id::LowBattery,
+        lpm_ok,
+    );
     if !lpm_ok {
         f.warning("Low power mode is not supported at polling rates of 2000 Hz and above. Lower the polling rate to use it.");
     }
@@ -757,10 +930,18 @@ pub fn options_for(cat: usize, stages: usize) -> Vec<(String, String)> {
             }
             v
         }
-        4 => [("Play / Pause", "play-pause"), ("Mute", "mute"), ("Volume up", "vol-up"), ("Volume down", "vol-down"), ("Next track", "next"), ("Previous track", "prev"), ("Stop", "stop")]
-            .iter()
-            .map(|(l, s)| (l.to_string(), format!("media:{s}")))
-            .collect(),
+        4 => [
+            ("Play / Pause", "play-pause"),
+            ("Mute", "mute"),
+            ("Volume up", "vol-up"),
+            ("Volume down", "vol-down"),
+            ("Next track", "next"),
+            ("Previous track", "prev"),
+            ("Stop", "stop"),
+        ]
+        .iter()
+        .map(|(l, s)| (l.to_string(), format!("media:{s}")))
+        .collect(),
         _ => Vec::new(),
     }
 }
@@ -815,7 +996,12 @@ pub fn pretty_spec(spec: Option<&str>, own: &str, macros_: &[MacroConfig]) -> St
                 .split('+')
                 .map(|p| {
                     let p = p.trim();
-                    if p.len() == 1 { p.to_uppercase() } else { let mut c = p.chars(); c.next().map(|x| x.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default() }
+                    if p.len() == 1 {
+                        p.to_uppercase()
+                    } else {
+                        let mut c = p.chars();
+                        c.next().map(|x| x.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default()
+                    }
                 })
                 .collect();
             format!("Key: {}", parts.join(" + "))
@@ -961,7 +1147,10 @@ fn macros_section(ui: &Ui, f: &mut Form) {
     let cfg = &ui.cfg;
     f.section_icon("Macros", Some(Icon::Keyboard));
     if ui.is_recording() {
-        f.note(&format!("Recording for {} s: {} events so far. Press keys and mouse buttons (the delays between them are recorded too), then click Stop or press Esc.", ui.rec_secs, ui.rec_count));
+        f.note(&format!(
+            "Recording for {} s: {} events so far. Press keys and mouse buttons (the delays between them are recorded too), then click Stop or press Esc.",
+            ui.rec_secs, ui.rec_count
+        ));
         f.buttons(&[("Stop recording", Id::MacroStop, true)]);
         return;
     }
@@ -979,7 +1168,14 @@ fn macros_section(ui: &Ui, f: &mut Form) {
         if sub.is_empty() {
             sub = "empty".into();
         }
-        f.push(Id::SelectMacro(i), f.x + PAD, f.y, f.w - 2 * PAD, 44, Kind::Row { title: format!("{}  ·  id {}  ·  {} bytes", m.name, m.id, bytes), sub, selected: ui.sel_macro == Some(i) });
+        f.push(
+            Id::SelectMacro(i),
+            f.x + PAD,
+            f.y,
+            f.w - 2 * PAD,
+            44,
+            Kind::Row { title: format!("{}  ·  id {}  ·  {} bytes", m.name, m.id, bytes), sub, selected: ui.sel_macro == Some(i) },
+        );
         f.y += 48;
     }
     f.gap(4);
@@ -1013,15 +1209,35 @@ fn app(ui: &Ui, f: &mut Form) {
     let cfg = &ui.cfg;
     f.section_icon("Tray app", Some(Icon::Program));
     f.toggle("Start at login", "Run the tray app (battery icon, in-game polling) when you sign in", ui.autostart, Id::Autostart);
-    f.slider("Battery refresh", "How often the tray icon reads the battery while you use the mouse", 10, 300, 10, cfg.tray.poll_seconds as i32, |v| format!("{v} s"), Id::PollSeconds);
+    f.slider(
+        "Battery refresh",
+        "How often the tray icon reads the battery while you use the mouse",
+        10,
+        300,
+        10,
+        cfg.tray.poll_seconds as i32,
+        |v| format!("{v} s"),
+        Id::PollSeconds,
+    );
     f.gap(4);
-    f.buttons(&[("Open config file", Id::OpenConfig, false), ("Re-import from mouse", Id::Reimport, false), ("Re-apply everything", Id::Reapply, false), ("Refresh", Id::Refresh, false)]);
+    f.buttons(&[
+        ("Open config file", Id::OpenConfig, false),
+        ("Re-import from mouse", Id::Reimport, false),
+        ("Re-apply everything", Id::Reapply, false),
+        ("Refresh", Id::Refresh, false),
+    ]);
     f.note("Re-import rebuilds the config from what the mouse has stored. Re-apply writes every setting of the config to the mouse again.");
 
     f.section_icon("Onboard profile", Some(Icon::Layers));
     let (stored, max) = ui.profiles.unwrap_or((1, 1));
     let slots: Vec<String> = (1..=max.clamp(1, 5)).map(|n| n.to_string()).collect();
-    f.chips("Profile in use", "Buttons and Dynamic Sensitivity are written to this onboard profile", &slots, Some((cfg.profile.active as usize).clamp(1, slots.len()) - 1), Id::Profile);
+    f.chips(
+        "Profile in use",
+        "Buttons and Dynamic Sensitivity are written to this onboard profile",
+        &slots,
+        Some((cfg.profile.active as usize).clamp(1, slots.len()) - 1),
+        Id::Profile,
+    );
     if max <= 1 {
         f.note("This mouse reports a single onboard profile, so there is nothing to switch to. The selector is here for Razer mice that hold several.");
     } else {
@@ -1048,10 +1264,7 @@ fn app(ui: &Ui, f: &mut Form) {
             f.note("Pairing mode is on: switch the mouse off and on (or plug the dongle in next to it). A newly paired mouse shows up above.");
             f.buttons(&[("Cancel pairing", Id::PairCancel, true)]);
         } else {
-            f.buttons(&[
-                ("Pair a device", Id::PairStart, true),
-                (if ui.confirm_unpair { "Yes, unpair" } else { "Unpair this mouse" }, Id::Unpair, false),
-            ]);
+            f.buttons(&[("Pair a device", Id::PairStart, true), (if ui.confirm_unpair { "Yes, unpair" } else { "Unpair this mouse" }, Id::Unpair, false)]);
         }
         if let Some(on) = ui.auto_pair {
             f.toggle("Auto-pairing", "Let the dongle pair with a compatible mouse by itself", on, Id::AutoPair);
@@ -1076,7 +1289,18 @@ fn app(ui: &Ui, f: &mut Form) {
     }
     f.info("Serial", ui.serial.as_deref().unwrap_or("-"));
     f.info("Config file", &crate::config_path().to_string_lossy());
-    f.info("State", if ui.pending { "changes pending (mouse asleep)" } else if ui.asleep { "mouse asleep" } else if ui.battery.is_some() { "connected" } else { "not connected" });
+    f.info(
+        "State",
+        if ui.pending {
+            "changes pending (mouse asleep)"
+        } else if ui.asleep {
+            "mouse asleep"
+        } else if ui.battery.is_some() {
+            "connected"
+        } else {
+            "not connected"
+        },
+    );
     f.info("Version", &format!("freenapse {}", crate::VERSION));
     f.info("Diagnostics", "after a crash, crash.txt in the config file's folder; freenapse --log records every exchange with the mouse in hid.log there");
 
@@ -1120,7 +1344,11 @@ fn roadmap(f: &mut Form) {
     f.status(Done, "Double-click, turbo, system keys", "double click, turbo with a repeat rate, sleep / power / wake");
     f.status(Never, "Profile switch button", "the mouse reports a single onboard profile, so there is nothing to switch to");
     f.status(Done, "Macros", "record here or write steps in the config; once / N times / held / toggle / sequence. This mouse has no macro memory, so the tray app plays them, like Synapse does");
-    f.status(Done, "Program and Text buttons", "start a program or open a file / URL, type a text; played by the tray app like macros. Windows shortcuts are plain Keyboard keys (win+d)");
+    f.status(
+        Done,
+        "Program and Text buttons",
+        "start a program or open a file / URL, type a text; played by the tray app like macros. Windows shortcuts are plain Keyboard keys (win+d)",
+    );
 
     f.section("App and device");
     f.status(Done, "Settings window, immediate apply", "pending while the mouse sleeps, written when it wakes");
@@ -1214,7 +1442,11 @@ pub unsafe fn draw_mouse(ui: &Ui, dc: HDC, r: &RECT, highlight: usize, regions: 
     shadow(dc, &body, s(g.w / 2), 4);
     clip_round(dc, &body, s(g.w / 2), || vgradient(dc, &body, rgb(0x3a, 0x3b, 0x3e), rgb(0x24, 0x25, 0x27)));
     let btn = |i: usize| -> RECT {
-        if i == 0 { RECT { left: dx(l), top: dy(g.top), right: dx(g.cx), bottom: dy(split) } } else { RECT { left: dx(g.cx), top: dy(g.top), right: dx(rt), bottom: dy(split) } }
+        if i == 0 {
+            RECT { left: dx(l), top: dy(g.top), right: dx(g.cx), bottom: dy(split) }
+        } else {
+            RECT { left: dx(g.cx), top: dy(g.top), right: dx(rt), bottom: dy(split) }
+        }
     };
     // Clip the button fills to the body outline.
     let rgn = windows_sys::Win32::Graphics::Gdi::CreateRoundRectRgn(body.left, body.top, body.right + 1, body.bottom + 1, s(g.w), s(g.w));
