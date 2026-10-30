@@ -30,12 +30,23 @@ const CLASS_NAME: &str = "freenapse-tray";
 const TIMER_POLL: usize = 1;
 const TIMER_GAME: usize = 2;
 const TIMER_RETRY: usize = 3;
+/// One shot after a HID device arrived or the PC resumed: reopen the mouse.
+const TIMER_REPLUG: usize = 4;
+/// One shot after the config file changed on disk (editors write in several steps).
+const TIMER_CONFIG: usize = 5;
+/// The daily update check.
+const TIMER_UPDATE: usize = 6;
+/// Posted by the config watcher thread when something in the config folder changed.
+const WM_CONFIG_FILE: u32 = WM_APP + 6;
+/// Posted by the update thread: lparam is a `Box<String>` with the newer tag, or 0.
+const WM_UPDATE_RESULT: u32 = WM_APP + 7;
 
 const ID_QUIT: usize = 1;
 const ID_APPLY: usize = 2;
 const ID_OPEN_CONFIG: usize = 3;
 const ID_REFRESH: usize = 4;
 const ID_SETTINGS: usize = 5;
+const ID_UPDATE: usize = 6;
 const ID_STAGE_BASE: usize = 100;
 const ID_POLL_BASE: usize = 200;
 
@@ -60,6 +71,11 @@ struct App {
     last_error: Option<String>,
     last_refresh: Option<Instant>,
     taskbar_created: u32,
+    /// Modification time of the config file as last loaded, to tell an edit from our own save.
+    config_mtime: Option<std::time::SystemTime>,
+    /// A newer release on GitHub (version without the `v`), shown in the menu and tooltip.
+    update_tag: Option<String>,
+    notified_update: bool,
 }
 
 fn wide(s: &str) -> Vec<u16> {
@@ -133,6 +149,9 @@ pub fn run(open_settings: bool) {
             last_error: None,
             last_refresh: None,
             taskbar_created: RegisterWindowMessageW(wide("TaskbarCreated").as_ptr()),
+            config_mtime: None,
+            update_tag: None,
+            notified_update: false,
         });
         let app_ptr = Box::into_raw(app);
 
@@ -182,6 +201,16 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             SetTimer(hwnd, TIMER_POLL, poll_ms, None);
             SetTimer(hwnd, TIMER_GAME, 2000, None);
             SetTimer(hwnd, TIMER_RETRY, 5000, None);
+            // Reconnect the moment the dongle is plugged in or the PC wakes, instead of at the next poll.
+            register_device_notifications(hwnd);
+            register_resume_notifications(hwnd);
+            // Re-apply the config file when it is edited by hand.
+            (*app).note_config_mtime();
+            watch_config(hwnd);
+            if (*app).config.tray.check_updates {
+                check_updates(hwnd);
+                SetTimer(hwnd, TIMER_UPDATE, 24 * 60 * 60 * 1000, None);
+            }
             0
         }
         WM_TIMER => {
@@ -196,6 +225,23 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
                     // Settings could not be written while the mouse was asleep: try again once it moves.
                     if ((*app).need_import || !(*app).config_applied || (*app).battery.is_none()) && user_active() {
                         (*app).refresh();
+                    }
+                }
+                TIMER_REPLUG => {
+                    KillTimer(hwnd, TIMER_REPLUG);
+                    // The handle may be stale after a resume; a fresh open finds the device again.
+                    (*app).mouse = None;
+                    (*app).battery = None;
+                    (*app).refresh();
+                    (*app).check_game();
+                }
+                TIMER_CONFIG => {
+                    KillTimer(hwnd, TIMER_CONFIG);
+                    (*app).reload_config_from_disk();
+                }
+                TIMER_UPDATE => {
+                    if (*app).config.tray.check_updates {
+                        check_updates(hwnd);
                     }
                 }
                 _ => {}
@@ -252,6 +298,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
                         Err(e) => (*app).config_error = Some(e),
                     }
                     load_soft_macros(&(*app).config);
+                    (*app).note_config_mtime();
                     (*app).config_applied = wparam == 1;
                     // The config (and the mouse) now hold the base layout; a running game is re-detected.
                     (*app).game_mode = None;
@@ -261,6 +308,42 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
                     0
                 }
                 ui::WM_UI_CLOSED => 0,
+                WM_DEVICECHANGE => {
+                    let event = wparam as u32;
+                    if event == DBT_DEVICEARRIVAL {
+                        // The interface exists before the device answers: look again shortly.
+                        SetTimer(hwnd, TIMER_REPLUG, 1500, None);
+                    } else if event == DBT_DEVICEREMOVECOMPLETE {
+                        if let Some(name) = broadcast_interface_name(lparam) {
+                            if (*app).mouse.as_ref().is_some_and(|m| m.path().eq_ignore_ascii_case(&name)) {
+                                (*app).mouse = None;
+                                (*app).battery = None;
+                                (*app).last_error = Some("mouse unplugged".into());
+                                (*app).update_tray();
+                            }
+                        }
+                    }
+                    1
+                }
+                WM_POWERBROADCAST => {
+                    let event = wparam as u32;
+                    if event == PBT_APMRESUMEAUTOMATIC || event == PBT_APMRESUMESUSPEND {
+                        // The dongle re-enumerates after a resume; give it a moment.
+                        SetTimer(hwnd, TIMER_REPLUG, 3000, None);
+                    }
+                    1
+                }
+                WM_CONFIG_FILE => {
+                    SetTimer(hwnd, TIMER_CONFIG, 400, None);
+                    0
+                }
+                WM_UPDATE_RESULT => {
+                    if lparam != 0 {
+                        let tag = *Box::from_raw(lparam as *mut String);
+                        (*app).update_found(&tag);
+                    }
+                    0
+                }
                 _ => DefWindowProcW(hwnd, msg, wparam, lparam),
             }
         }
@@ -316,6 +399,9 @@ impl App {
         if let Some(e) = &self.config_error {
             tip.push_str(&format!("\nConfig error: {e}"));
         }
+        if let Some(v) = &self.update_tag {
+            tip.push_str(&format!("\nUpdate {v} available"));
+        }
         copy_wide(&mut self.nid.szTip, &tip);
         self.nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP | NIF_SHOWTIP;
         Shell_NotifyIconW(NIM_MODIFY, &self.nid);
@@ -368,6 +454,7 @@ impl App {
                     load_soft_macros(&cfg);
                     self.config = cfg;
                     self.need_import = false;
+                    self.note_config_mtime();
                     self.config_applied = true;
                     self.notify("freenapse", "Saved the mouse's current settings as your config file", false);
                 }
@@ -486,6 +573,60 @@ impl App {
         }
     }
 
+    /// Remember when the config file was last written by us or loaded, so an
+    /// edit by hand can be told apart from the settings window's own save.
+    fn note_config_mtime(&mut self) {
+        self.config_mtime = std::fs::metadata(config_path()).and_then(|m| m.modified()).ok();
+    }
+
+    /// The config file changed on disk (watcher thread): reload it and apply it,
+    /// unless it was our own save.
+    unsafe fn reload_config_from_disk(&mut self) {
+        let mtime = std::fs::metadata(config_path()).and_then(|m| m.modified()).ok();
+        if mtime.is_none() || mtime == self.config_mtime {
+            return;
+        }
+        self.config_mtime = mtime;
+        match Config::load(&config_path()) {
+            Ok(c) => {
+                if c == self.config {
+                    return;
+                }
+                self.config = c;
+                self.config_error = None;
+            }
+            Err(e) => {
+                // Half-written or wrong: say so in the tooltip, keep driving the mouse with the old one.
+                self.config_error = Some(e);
+                self.update_tray();
+                return;
+            }
+        }
+        load_soft_macros(&self.config);
+        self.config_applied = false;
+        self.game_mode = None;
+        self.game_wanted = None;
+        self.refresh();
+        self.check_game();
+        if self.config_applied {
+            self.notify("freenapse", "Config file changed: written to the mouse", false);
+        }
+    }
+
+    /// The update thread found a release newer than this build.
+    unsafe fn update_found(&mut self, tag: &str) {
+        let v = tag.trim().trim_start_matches(['v', 'V']).to_string();
+        if !crate::update::is_newer(&v, crate::VERSION) {
+            return;
+        }
+        if !self.notified_update {
+            self.notified_update = true;
+            self.notify("freenapse update", &format!("Version {v} is available. The tray menu has the link."), false);
+        }
+        self.update_tag = Some(v);
+        self.update_tray();
+    }
+
     unsafe fn show_menu(&mut self) {
         let menu = CreatePopupMenu();
         let status = match (self.battery, self.mouse.as_ref()) {
@@ -498,6 +639,9 @@ impl App {
             if self.battery.is_none() {
                 AppendMenuW(menu, MF_STRING | MF_GRAYED, 0, wide(e).as_ptr());
             }
+        }
+        if let Some(v) = &self.update_tag {
+            AppendMenuW(menu, MF_STRING, ID_UPDATE, wide(&format!("Update to freenapse {v}...")).as_ptr());
         }
         AppendMenuW(menu, MF_SEPARATOR, 0, ptr::null());
 
@@ -539,6 +683,9 @@ impl App {
             ID_SETTINGS => {
                 ui::open(self.hwnd);
             }
+            ID_UPDATE => {
+                ShellExecuteW(0, wide("open").as_ptr(), wide(crate::update::RELEASES_URL).as_ptr(), ptr::null(), ptr::null(), SW_SHOWNORMAL);
+            }
             ID_APPLY => {
                 match Config::load_or_create(&config_path()) {
                     Ok(c) => {
@@ -548,6 +695,7 @@ impl App {
                     Err(e) => self.config_error = Some(e),
                 }
                 load_soft_macros(&self.config);
+                self.note_config_mtime();
                 self.config_applied = false;
                 self.refresh();
             }
@@ -609,6 +757,84 @@ unsafe fn foreground_path() -> Option<String> {
         return None;
     }
     Some(String::from_utf16_lossy(&buf[..len as usize]))
+}
+
+// ---------------------------------------------------------------------------
+// Hot-plug, resume, config file watching and the update check. The tray window
+// is message-only, so broadcasts do not reach it: device and power events are
+// registered for explicitly, and the two threads post their own messages.
+// ---------------------------------------------------------------------------
+
+/// WM_DEVICECHANGE for every HID interface that comes or goes.
+unsafe fn register_device_notifications(hwnd: HWND) {
+    use windows_sys::Win32::Devices::HumanInterfaceDevice::HidD_GetHidGuid;
+    let mut filter: DEV_BROADCAST_DEVICEINTERFACE_W = mem::zeroed();
+    filter.dbcc_size = mem::size_of::<DEV_BROADCAST_DEVICEINTERFACE_W>() as u32;
+    filter.dbcc_devicetype = DBT_DEVTYP_DEVICEINTERFACE;
+    HidD_GetHidGuid(&mut filter.dbcc_classguid);
+    RegisterDeviceNotificationW(hwnd, &filter as *const _ as *const c_void, DEVICE_NOTIFY_WINDOW_HANDLE);
+}
+
+/// WM_POWERBROADCAST on suspend and resume.
+unsafe fn register_resume_notifications(hwnd: HWND) {
+    use windows_sys::Win32::System::Power::RegisterSuspendResumeNotification;
+    RegisterSuspendResumeNotification(hwnd, DEVICE_NOTIFY_WINDOW_HANDLE);
+}
+
+/// The interface path carried by a WM_DEVICECHANGE, when it is about a device interface.
+unsafe fn broadcast_interface_name(lparam: LPARAM) -> Option<String> {
+    if lparam == 0 {
+        return None;
+    }
+    let hdr = &*(lparam as *const DEV_BROADCAST_HDR);
+    if hdr.dbch_devicetype != DBT_DEVTYP_DEVICEINTERFACE {
+        return None;
+    }
+    let d = lparam as *const DEV_BROADCAST_DEVICEINTERFACE_W;
+    let name_at = mem::offset_of!(DEV_BROADCAST_DEVICEINTERFACE_W, dbcc_name);
+    let size = (*d).dbcc_size as usize;
+    if size <= name_at {
+        return None;
+    }
+    let units = std::slice::from_raw_parts(ptr::addr_of!((*d).dbcc_name) as *const u16, (size - name_at) / 2);
+    let len = units.iter().position(|c| *c == 0).unwrap_or(units.len());
+    Some(String::from_utf16_lossy(&units[..len]))
+}
+
+/// A thread that posts `WM_CONFIG_FILE` whenever something in the config
+/// folder is written. The tray then decides whether the config file changed.
+fn watch_config(hwnd: HWND) {
+    let Some(dir) = config_path().parent().map(|p| p.to_path_buf()) else { return };
+    let _ = std::fs::create_dir_all(&dir);
+    std::thread::spawn(move || unsafe {
+        use windows_sys::Win32::Storage::FileSystem::{
+            FILE_NOTIFY_CHANGE_FILE_NAME, FILE_NOTIFY_CHANGE_LAST_WRITE, FILE_NOTIFY_CHANGE_SIZE, FindFirstChangeNotificationW, FindNextChangeNotification,
+        };
+        use windows_sys::Win32::System::Threading::{INFINITE, WaitForSingleObject};
+        let path = wide(&dir.to_string_lossy());
+        let h = FindFirstChangeNotificationW(path.as_ptr(), 0, FILE_NOTIFY_CHANGE_LAST_WRITE | FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_SIZE);
+        if h == INVALID_HANDLE_VALUE || h == 0 {
+            return;
+        }
+        loop {
+            if WaitForSingleObject(h, INFINITE) != 0 {
+                break;
+            }
+            PostMessageW(hwnd, WM_CONFIG_FILE, 0, 0);
+            if FindNextChangeNotification(h) == 0 {
+                break;
+            }
+        }
+    });
+}
+
+/// Ask GitHub for the latest release on a thread; the answer arrives as `WM_UPDATE_RESULT`.
+fn check_updates(hwnd: HWND) {
+    std::thread::spawn(move || {
+        let newer = crate::update::fetch_latest_tag().ok().filter(|t| crate::update::is_newer(t, crate::VERSION));
+        let lparam = newer.map(|t| Box::into_raw(Box::new(t)) as LPARAM).unwrap_or(0);
+        unsafe { PostMessageW(hwnd, WM_UPDATE_RESULT, 0, lparam) };
+    });
 }
 
 // ---------------------------------------------------------------------------

@@ -247,6 +247,8 @@ pub enum Id {
     Category(usize),
     Option(usize),
     KeyEdit,
+    /// The text box of the Text function on the Customize page.
+    TextEdit,
     MacroPlay,
     MacroTimes,
     SelectMacro(usize),
@@ -454,6 +456,8 @@ pub struct Ui {
     pub(crate) layer: Layer,
     /// Config key ("back", "hypershift.back") whose keyboard assignment is being typed.
     pub(crate) key_mode: Option<String>,
+    /// Button key whose Text function is being typed (the edit box shows before a text exists).
+    pub(crate) text_mode: Option<String>,
     pub(crate) autostart: bool,
     rotation_last: i8,
     /// Macro selected in the MACROS list (index into `cfg.macros`).
@@ -611,6 +615,7 @@ unsafe fn create(owner: HWND) -> HWND {
         sel_button: 0,
         layer: Layer::Normal,
         key_mode: None,
+        text_mode: None,
         autostart: autostart::is_enabled(),
         rotation_last: 5,
         sel_macro: None,
@@ -2016,6 +2021,24 @@ impl Ui {
                     Err(e) => self.set_status(&e, ERR),
                 }
             }
+            Id::TextEdit => {
+                if text.is_empty() {
+                    return;
+                }
+                // A one-step macro that the tray app types with the button.
+                let key = self.button_key();
+                let step = format!("text:{text}");
+                let label = if text.chars().count() > 24 { format!("{}...", text.chars().take(22).collect::<String>()) } else { text.clone() };
+                let id = self.cfg.ensure_step_macro(&step, &label);
+                let spec = macro_spec(id, Playback::Times(1));
+                self.text_mode = None;
+                if self.layer_buttons().get(&key) != Some(&spec) {
+                    self.layer_buttons_mut().insert(key, spec);
+                    let w = self.button_write();
+                    self.commit(w);
+                    return;
+                }
+            }
             Id::MacroName => {
                 if let Some(m) = self.sel_macro.and_then(|i| self.cfg.macros.get_mut(i)) {
                     let name = text.chars().take(60).collect::<String>();
@@ -2198,13 +2221,20 @@ impl Ui {
 
     /// Ask for a program with the standard Open dialog and give it a profile.
     unsafe fn browse_program(&mut self) {
+        if let Some(path) = self.open_dialog("Choose the game's program", "Programs (*.exe)\0*.exe\0All files (*.*)\0*.*\0\0") {
+            self.add_program(&path);
+        }
+    }
+
+    /// The standard Open dialog; `filter` is the usual NUL-separated pair list. None when cancelled.
+    unsafe fn open_dialog(&self, title: &str, filter: &str) -> Option<String> {
         use windows_sys::Win32::System::Com::{COINIT_APARTMENTTHREADED, CoInitializeEx};
         use windows_sys::Win32::UI::Controls::Dialogs::*;
         // The dialog's shell views want COM on this thread; a second call is harmless.
         CoInitializeEx(ptr::null(), COINIT_APARTMENTTHREADED as u32);
         let mut file = [0u16; 1024];
-        let filter: Vec<u16> = "Programs (*.exe)\0*.exe\0All files (*.*)\0*.*\0\0".encode_utf16().collect();
-        let title = wide("Choose the game's program");
+        let filter: Vec<u16> = filter.encode_utf16().collect();
+        let title = wide(title);
         let mut ofn: OPENFILENAMEW = mem::zeroed();
         ofn.lStructSize = mem::size_of::<OPENFILENAMEW>() as u32;
         ofn.hwndOwner = self.hwnd;
@@ -2214,11 +2244,10 @@ impl Ui {
         ofn.lpstrTitle = title.as_ptr();
         ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | OFN_HIDEREADONLY | OFN_DONTADDTORECENT;
         if GetOpenFileNameW(&mut ofn) == 0 {
-            return;
+            return None;
         }
         let n = file.iter().position(|c| *c == 0).unwrap_or(file.len());
-        let path = String::from_utf16_lossy(&file[..n]);
-        self.add_program(&path);
+        Some(String::from_utf16_lossy(&file[..n]))
     }
 
     /// Profile for a program picked by hand, matched by its file name.
@@ -2746,6 +2775,7 @@ impl Ui {
                 let c = (v as usize).min(pages::CATEGORIES.len() - 1);
                 let key = self.button_key();
                 self.key_mode = None;
+                self.text_mode = None;
                 let spec = match pages::CATEGORIES[c] {
                     "Default" => None,
                     "Mouse" => Some(format!("mouse:{}", BUTTONS[self.sel_button].0)),
@@ -2770,6 +2800,24 @@ impl Ui {
                         };
                         Some(macro_spec(m.id, Playback::Times(1)))
                     }
+                    "Program" => {
+                        // A one-step macro that the tray app plays: pick the program now.
+                        let Some(path) = self.open_dialog("Program to start with this button", "Programs (*.exe)\0*.exe\0All files (*.*)\0*.*\0\0") else {
+                            self.layout();
+                            InvalidateRect(self.hwnd, ptr::null(), 0);
+                            return;
+                        };
+                        let step = format!("launch:{path}");
+                        let id = self.cfg.ensure_step_macro(&step, &crate::macros::launch_label(&path));
+                        Some(macro_spec(id, Playback::Times(1)))
+                    }
+                    "Text" => {
+                        // Show the text box; nothing is written until a text is typed.
+                        self.text_mode = Some(key);
+                        self.layout();
+                        InvalidateRect(self.hwnd, ptr::null(), 0);
+                        return;
+                    }
                     "Hypershift" => Some("hypershift".to_string()),
                     _ => Some("disabled".to_string()),
                 };
@@ -2786,7 +2834,7 @@ impl Ui {
             Id::Option(_) => {
                 let key = self.button_key();
                 let cur = self.layer_buttons().get(&key).cloned().unwrap_or_default();
-                let cat = pages::category_of(Some(&cur));
+                let cat = pages::category_of(Some(&cur), &self.cfg.macros);
                 let rate = pages::turbo_split(&cur).1;
                 if cat == pages::CAT_MACRO {
                     // Keep the playback option, change the macro.
@@ -2803,7 +2851,7 @@ impl Ui {
                 }
                 self.button_write()
             }
-            Id::KeyEdit | Id::GamesEdit | Id::MacroName | Id::GameExe | Id::GameName | Id::GameFilter => return,
+            Id::KeyEdit | Id::TextEdit | Id::GamesEdit | Id::MacroName | Id::GameExe | Id::GameName | Id::GameFilter => return,
         };
         self.commit(write);
     }
@@ -2910,12 +2958,13 @@ impl Ui {
                     let _ = (code, hs);
                 }
                 Write::Macro(id) => {
-                    if m.macro_support()? {
+                    if m.macro_support()? && !cfg.macro_needs_software(id) {
                         if let Some(mc) = cfg.macro_by_id(id) {
                             m.write_macro(id, &mc.name, &mc.bytes())?;
                         }
                     }
-                    // Otherwise the tray app plays it; it reloads the config after this commit.
+                    // Otherwise (no macro memory, or text / launch steps) the tray app plays it;
+                    // it reloads the config after this commit.
                 }
                 Write::MacroDelete(id) => {
                     if m.macro_support()? && m.macro_ids()?.contains(&id) {

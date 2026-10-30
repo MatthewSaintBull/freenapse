@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.6.0.schema.json
+# freenapse.exe is a single portable executable: winget copies it into its
+# portable packages folder and puts a `freenapse` alias on the PATH, with no
+# installer and no registry entries. The SHA-256 is the release's
+# freenapse.exe.sha256, uppercase as winget wants it.
+PackageIdentifier: MatteoSantoro.freenapse
+PackageVersion: 0.2.0
+InstallerType: portable
+Commands:
+  - freenapse
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/MatthewSaintBull/freenapse/releases/download/v0.2.0/freenapse.exe
+    InstallerSha256: 59FD3F2D0A99D0FD08D86E04DF37963BB20585083520AAECF49B8FD10FE80077
+ReleaseDate: 2026-10-30
+ManifestType: installer
+ManifestVersion: 1.6.0

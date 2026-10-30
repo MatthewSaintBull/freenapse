@@ -246,6 +246,9 @@ pub fn apply_macros(mouse: &Mouse, cfg: &Config) -> Result<Vec<String>> {
     }
     let stored = mouse.macro_ids()?;
     for m in &cfg.macros {
+        if cfg.macro_needs_software(m.id) {
+            continue; // text / launch steps: played by the tray app, nothing to store
+        }
         let bytes = m.bytes();
         let same = stored.contains(&m.id) && mouse.macro_data(m.id).map(|d| d == bytes).unwrap_or(false);
         if !same {

@@ -653,15 +653,41 @@ fn power(ui: &Ui, f: &mut Form) {
     }
 }
 
-pub const CATEGORIES: [&str; 9] = ["Default", "Mouse", "Keyboard", "DPI", "Multimedia", "System", "Macro", "Hypershift", "Disabled"];
+pub const CATEGORIES: [&str; 11] = ["Default", "Mouse", "Keyboard", "DPI", "Multimedia", "System", "Macro", "Program", "Text", "Hypershift", "Disabled"];
 pub const CAT_MOUSE: usize = 1;
 pub const CAT_KEYBOARD: usize = 2;
 pub const CAT_SYSTEM: usize = 5;
 pub const CAT_MACRO: usize = 6;
-pub const CAT_HYPERSHIFT: usize = 7;
-pub const CAT_DISABLED: usize = 8;
+/// Start a program: a one-step `launch:` macro played by the tray app.
+pub const CAT_LAUNCH: usize = 7;
+/// Type a text: a one-step `text:` macro played by the tray app.
+pub const CAT_TEXT: usize = 8;
+pub const CAT_HYPERSHIFT: usize = 9;
+pub const CAT_DISABLED: usize = 10;
 
-pub fn category_of(spec: Option<&str>) -> usize {
+/// The single software step of a macro bound by the Program or Text function:
+/// (`launch` or `text`, its value), when the assignment is exactly that.
+pub fn software_step(spec: Option<&str>, macros_: &[MacroConfig]) -> Option<(&'static str, String)> {
+    let (id, _) = parse_button(spec?).ok().flatten().and_then(|f| f.macro_binding())?;
+    let m = macros_.iter().find(|m| m.id == id)?;
+    if m.events.len() != 1 {
+        return None;
+    }
+    if let Some(p) = m.events[0].strip_prefix("launch:") {
+        return Some(("launch", p.to_string()));
+    }
+    if let Some(t) = m.events[0].strip_prefix("text:") {
+        return Some(("text", t.to_string()));
+    }
+    None
+}
+
+pub fn category_of(spec: Option<&str>, macros_: &[MacroConfig]) -> usize {
+    match software_step(spec, macros_) {
+        Some(("launch", _)) => return CAT_LAUNCH,
+        Some(("text", _)) => return CAT_TEXT,
+        _ => {}
+    }
     match spec {
         None | Some("default") => 0,
         Some(s) if s.starts_with("mouse:") || s.starts_with("turbo:") || s == "double-click" => CAT_MOUSE,
@@ -760,6 +786,11 @@ pub fn pretty_spec(spec: Option<&str>, own: &str, macros_: &[MacroConfig]) -> St
         if let Some(n) = rate {
             return format!("{} · turbo {n}/s", pretty_spec(Some(&base), own, macros_));
         }
+        match software_step(spec, macros_) {
+            Some(("launch", p)) => return format!("Program: {}", macros::launch_label(&p)),
+            Some(("text", t)) => return format!("Text: {t}"),
+            _ => {}
+        }
         if let Some((id, play)) = parse_button(s).ok().flatten().and_then(|f| f.macro_binding()) {
             let name = macros_.iter().find(|m| m.id == id).map(|m| m.name.clone()).unwrap_or_else(|| format!("macro {id}"));
             return format!("Macro: {name} ({})", play.label().to_lowercase());
@@ -850,7 +881,13 @@ fn customize(ui: &Ui, f: &mut Form) {
     let name = BUTTONS[ui.sel_button].0;
     let key = ui.button_key();
     let spec = layer_buttons.get(&key).map(String::as_str);
-    let cat = if ui.key_mode.as_deref() == Some(key.as_str()) { CAT_KEYBOARD } else { category_of(spec) };
+    let cat = if ui.key_mode.as_deref() == Some(key.as_str()) {
+        CAT_KEYBOARD
+    } else if ui.text_mode.as_deref() == Some(key.as_str()) {
+        CAT_TEXT
+    } else {
+        category_of(spec, &cfg.macros)
+    };
     let (base, rate) = spec.map(turbo_split).unwrap_or((String::new(), None));
     let layer_title = match ui.layer {
         Layer::Normal => String::new(),
@@ -898,6 +935,18 @@ fn customize(ui: &Ui, f: &mut Form) {
             } else {
                 f.note("The Viper V3 Pro has no macro memory, so the tray app plays the macro when the button is pressed (Synapse does the same for this mouse): keep the tray running. The button sends one of the keys F13 to F24, which the tray turns into the macro. While held repeats it until the button is released; Toggle starts and stops it; Sequence plays one step per press.");
             }
+        }
+        CAT_LAUNCH => {
+            match software_step(spec, &cfg.macros) {
+                Some((_, p)) => f.note(&format!("Starts {p} when the button is pressed. Click Program again to choose another one.")),
+                None => f.note("Choose the program in the dialog. The button then starts it, or opens the file, when pressed."),
+            }
+            f.note("The tray app does the starting (the mouse sends one of the keys F13 to F24, which the tray turns into the launch), so keep it running. Windows shortcuts need no program: assign them as Keyboard keys, e.g. win+d.");
+        }
+        CAT_TEXT => {
+            let cur = software_step(spec, &cfg.macros).filter(|(k, _)| *k == "text").map(|(_, t)| t).unwrap_or_default();
+            f.edit("Text to type", "Press Enter to save", &cur, false, Id::TextEdit);
+            f.note("The tray app types the text when the button is pressed, as Unicode characters, so any keyboard layout and any character work. Keep the tray running.");
         }
         CAT_HYPERSHIFT => f.note("While this button is held, the Hypershift layer is active: all other buttons use their Hypershift assignment."),
         CAT_DISABLED => f.note("The button does nothing."),
@@ -1071,7 +1120,7 @@ fn roadmap(f: &mut Form) {
     f.status(Done, "Double-click, turbo, system keys", "double click, turbo with a repeat rate, sleep / power / wake");
     f.status(Never, "Profile switch button", "the mouse reports a single onboard profile, so there is nothing to switch to");
     f.status(Done, "Macros", "record here or write steps in the config; once / N times / held / toggle / sequence. This mouse has no macro memory, so the tray app plays them, like Synapse does");
-    f.status(Todo, "Software bindings", "launch program, type text, Windows shortcuts; needs a resident input hook");
+    f.status(Done, "Program and Text buttons", "start a program or open a file / URL, type a text; played by the tray app like macros. Windows shortcuts are plain Keyboard keys (win+d)");
 
     f.section("App and device");
     f.status(Done, "Settings window, immediate apply", "pending while the mouse sleeps, written when it wakes");
@@ -1097,7 +1146,7 @@ fn roadmap(f: &mut Form) {
     f.bullet(MUTED, "Double-click, turbo and system keys; Dynamic Sensitivity with a curve editor; independent X/Y DPI; onboard profile selection; Calibration tab rebuilt on Synapse's engine for this mouse.");
 
     f.section_icon("Later", Some(Icon::Checklist));
-    f.bullet(BLUE, "Software bindings with a resident input hook: launch a program, type text, Windows shortcuts.");
+    f.bullet(BLUE, "Program and Text buttons: start a program or type a text with a button; the tray app plays them like macros. Hot-plug and wake-up reconnect, the config file re-applied when edited, and a once-a-day update notice.");
     f.bullet(BLUE, "A product table so other Razer mice sharing this protocol can be added without code changes.");
     f.bullet(BLUE, "Single-file signed download.");
     f.bullet(MUTED, "Bluetooth connection support for mice that have it.");

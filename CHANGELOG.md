@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+- Program and Text buttons: a button starts a program (or opens a file or URL)
+  or types a text with any characters in any layout. They are one-step macros
+  (`launch:`, `text:`) that the tray app plays like the other software macros;
+  the Customize page's Program and Text functions create them. Windows
+  shortcuts need nothing new: `key:win+d` is an onboard key.
+- The tray reconnects as soon as the dongle is plugged in or the PC resumes
+  from sleep (device and power notifications) instead of at the next poll.
+- The tray watches the config file and writes it to the mouse when it is edited
+  by hand; no `freenapse apply` needed.
+- Update notice: once a day the tray asks GitHub for the latest release and,
+  when it is newer, says so once and adds "Update to freenapse x.y.z..." to
+  its menu. One GET to api.github.com, nothing about you in it;
+  `[tray] check_updates = false` turns it off.
+- Packaging: winget manifests (`MatteoSantoro.freenapse`, portable) and a
+  Scoop manifest in `packaging/`, both ways around the SmartScreen prompt an
+  unsigned download gets.
+- CI runs rustfmt and clippy (`-D warnings`); `tests/golden.rs` freezes the
+  exact bytes of every command builder.
+
 ## 0.2.0 (2026-10-30)
 
 - A device table (`src/device.rs`, `DeviceSpec`) drives what freenapse does per

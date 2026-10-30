@@ -1,0 +1,4 @@
+# The code was written with long lines and compact literals; this keeps rustfmt
+# close to that style instead of reflowing every file. CI runs `cargo fmt --check`.
+max_width = 160
+use_small_heuristics = "Max"

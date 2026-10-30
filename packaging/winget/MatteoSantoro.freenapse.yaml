@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.version.1.6.0.schema.json
+# Version manifest for the Windows Package Manager (winget). The three files in
+# this folder are submitted together to github.com/microsoft/winget-pkgs under
+# manifests/m/MatteoSantoro/freenapse/<version>/. See packaging/README.md.
+PackageIdentifier: MatteoSantoro.freenapse
+PackageVersion: 0.2.0
+DefaultLocale: en-US
+ManifestType: version
+ManifestVersion: 1.6.0

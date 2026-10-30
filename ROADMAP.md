@@ -50,7 +50,7 @@ Legend: ✅ done and verified on the mouse, 🟡 partial, ❌ not yet, 🚫 out 
 | Double-click, turbo (mouse button or key, with repeat rate), system keys sleep / power / wake | ✅ | config and window, verified read-back |
 | Profile switch button | 🚫 | the mouse reports a single onboard profile, so there is nothing to switch to |
 | Macros | ✅ | recorded in the window (keys, mouse buttons, wheel, delays) or written as steps in `[[macros]]`; five playback options. The Viper V3 Pro has no macro memory (every macro command answers "not supported" and Synapse's spec for it says `macros: false`), so, like Synapse, the tray app plays them: the button sends F13..F24 and the tray's keyboard hook turns it into the macro. Mice with macro memory get them stored onboard with Synapse's commands |
-| Software bindings (launch program, type text, Windows shortcuts) | ❌ | needs a resident input hook |
+| Software bindings (launch program, type text, Windows shortcuts) | ✅ | Program and Text functions on the Customize page, `launch:` / `text:` macro steps in the config; played by the tray app like software macros. Windows shortcuts are onboard keys (`key:win+d`) |
 
 ### App and device
 
@@ -92,7 +92,6 @@ All three are implemented. How each one turned out on the hardware:
 
 ### Later
 
-* Software bindings that need a resident input hook: launch a program, type text, Windows shortcuts.
 * Verifying the device table rows beyond the Viper V3 Pro with their owners (`freenapse probe`, then `[device] allow_unverified`).
 * Bluetooth connection support for mice that have it.
 * Code-signing the executable.

@@ -91,6 +91,9 @@ active = 1
 poll_seconds = 60
 # Pop a notification when the battery drops to this percentage.
 notify_percent = 15
+# Once a day, ask GitHub whether a newer release exists and say so in the tray menu. This is the
+# only network request freenapse makes (one GET to api.github.com, nothing about you in it).
+check_updates = true
 
 # Per-game profiles (optional, one [[games]] block per program). While the program owns the
 # foreground window the tray app applies these and restores the settings above when you leave it.
@@ -109,7 +112,10 @@ notify_percent = 15
 # Onboard macros (optional, one [[macros]] block each), stored in the mouse's macro memory and
 # bound with "macro:<id>" (play once), "macro:<id>:<n>" (n times), "macro-held:<id>",
 # "macro-toggle:<id>" or "macro-seq:<id>" in [buttons]. Steps: "press:<key>", "down:<key>", "up:<key>",
-# "click:<button>", "mouse-down:<button>", "mouse-up:<button>", "scroll:up|down", "delay:<ms>", "move:<dx>,<dy>".
+# "click:<button>", "mouse-down:<button>", "mouse-up:<button>", "scroll:up|down", "delay:<ms>", "move:<dx>,<dy>",
+# and two that only the tray app can play, so a macro using them is never stored in the mouse:
+# "text:<anything to type>" and "launch:<program, file or URL>" (the Customize page's Program and Text
+# functions create these). Windows shortcuts need no macro: "key:win+d" and the like are onboard keys.
 # [[macros]]
 # id = 1
 # name = "Reload and jump"
@@ -282,6 +288,8 @@ pub struct DeviceConfig {
 pub struct TrayConfig {
     pub poll_seconds: u32,
     pub notify_percent: u8,
+    /// Ask GitHub once a day whether a newer release exists (the only network request).
+    pub check_updates: bool,
 }
 
 impl Default for Config {
@@ -335,7 +343,7 @@ impl Default for DongleConfig {
     fn default() -> Self { DongleConfig { led: 1 } }
 }
 impl Default for TrayConfig {
-    fn default() -> Self { TrayConfig { poll_seconds: 60, notify_percent: 15 } }
+    fn default() -> Self { TrayConfig { poll_seconds: 60, notify_percent: 15, check_updates: true } }
 }
 
 impl Config {
@@ -537,6 +545,28 @@ impl Config {
         self.macros.iter().find(|m| m.id == id)
     }
 
+    /// True when the macro has steps only the tray app can play (text, launch).
+    pub fn macro_needs_software(&self, id: u16) -> bool {
+        self.macro_by_id(id).and_then(|m| m.events().ok()).is_some_and(|ev| crate::macros::needs_software(&ev))
+    }
+
+    /// The macro that is exactly this one software step (what the Program and
+    /// Text functions of the Customize page bind), if the config has one.
+    pub fn macro_for_step(&self, step: &str) -> Option<u16> {
+        self.macros.iter().find(|m| m.events.len() == 1 && m.events[0] == step).map(|m| m.id)
+    }
+
+    /// Bind a single software step to a button: reuse the macro that is just
+    /// that step, or add one named after it. Returns the macro id.
+    pub fn ensure_step_macro(&mut self, step: &str, name: &str) -> u16 {
+        if let Some(id) = self.macro_for_step(step) {
+            return id;
+        }
+        let id = self.next_macro_id();
+        self.macros.push(MacroConfig { id, name: name.to_string(), events: vec![step.to_string()] });
+        id
+    }
+
     /// Every distinct (macro, playback) binding in the config, in a fixed order:
     /// slot i is played by the key F13 + i on mice without macro memory.
     pub fn soft_macro_slots(&self) -> Vec<(u16, Playback)> {
@@ -555,7 +585,9 @@ impl Config {
     /// The function actually written for a button: macro bindings become the
     /// slot key (F13..F24) when the mouse has no macro memory.
     pub fn resolve_button(&self, f: ButtonFunction, onboard_macros: bool) -> ButtonFunction {
-        if onboard_macros {
+        // A macro with text or launch steps is software even where macro memory exists.
+        let software = f.macro_binding().is_some_and(|(id, _)| self.macro_needs_software(id));
+        if onboard_macros && !software {
             return f;
         }
         match f.macro_binding() {
@@ -1207,6 +1239,17 @@ mod tests {
         assert_eq!(c.resolve_button(f, true), f);
         let plain = parse_button("mouse:left").unwrap().unwrap();
         assert_eq!(c.resolve_button(plain, false), plain);
+
+        // A launch or text macro is software even on a mouse with macro memory.
+        let id = c.ensure_step_macro("launch:C:/Tools/obs64.exe", "obs64.exe");
+        assert_eq!(id, 3);
+        assert_eq!(c.ensure_step_macro("launch:C:/Tools/obs64.exe", "again"), 3, "reused, not duplicated");
+        assert!(c.macro_needs_software(3));
+        assert!(!c.macro_needs_software(1));
+        c.buttons.insert("middle".into(), "macro:3".into());
+        let f = parse_button("macro:3").unwrap().unwrap();
+        assert_eq!(c.resolve_button(f, true), ButtonFunction::key(0, 0x6a), "third slot: F15");
+        assert_eq!(c.resolve_button(parse_button("macro-held:1").unwrap().unwrap(), true), parse_button("macro-held:1").unwrap().unwrap());
     }
 
     #[test]

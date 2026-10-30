@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
+PackageIdentifier: MatteoSantoro.freenapse
+PackageVersion: 0.2.0
+PackageLocale: en-US
+Publisher: Matteo Santoro
+PublisherUrl: https://github.com/MatthewSaintBull
+PublisherSupportUrl: https://github.com/MatthewSaintBull/freenapse/issues
+PackageName: freenapse
+PackageUrl: https://freenapse.app
+License: MIT
+LicenseUrl: https://github.com/MatthewSaintBull/freenapse/blob/main/LICENSE
+Copyright: Copyright (c) 2026 Matteo Santoro
+ShortDescription: Configure a Razer Viper V3 Pro on Windows without Razer Synapse.
+Description: |-
+  One portable executable that writes DPI stages, polling rate, button assignments, macros, sensor and power settings into the onboard memory of a Razer Viper V3 Pro, wired or through its HyperSpeed / HyperPolling dongle. It replaces Razer Synapse 4 with no installer, no services and no account: run it once, uninstall Synapse, and the mouse keeps the settings on any PC. The same file is a tray app (battery, DPI stage and polling rate, per-game profiles, macro playback), a settings window and a command-line tool. Other Razer mice open read-only until an owner verifies them. Not affiliated with Razer Inc.
+Moniker: freenapse
+Tags:
+  - razer
+  - mouse
+  - synapse
+  - viper-v3-pro
+  - dpi
+  - polling-rate
+  - hid
+  - portable
+ReleaseNotesUrl: https://freenapse.app/changelog/
+Documentations:
+  - DocumentLabel: Guides
+    DocumentUrl: https://freenapse.app/guides/
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

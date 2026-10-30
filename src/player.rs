@@ -141,8 +141,38 @@ pub fn play(events: &[Event], stop: &AtomicBool) {
                     }
                 }
                 Event::Raw(_) => {}
+                Event::Text(t) => {
+                    for unit in t.encode_utf16() {
+                        if stop.load(Ordering::Relaxed) {
+                            break;
+                        }
+                        send(unicode_input(unit, false));
+                        send(unicode_input(unit, true));
+                    }
+                }
+                Event::Launch(target) => launch(target),
             }
         }
+    }
+}
+
+/// A character as a Unicode key event: independent of the keyboard layout,
+/// and the only way to type what no key produces.
+fn unicode_input(unit: u16, up: bool) -> INPUT {
+    let flags = KEYEVENTF_UNICODE | if up { KEYEVENTF_KEYUP } else { 0 };
+    INPUT { r#type: INPUT_KEYBOARD, Anonymous: INPUT_0 { ki: KEYBDINPUT { wVk: 0, wScan: unit, dwFlags: flags, time: 0, dwExtraInfo: INJECT_MARK } } }
+}
+
+/// Start a program, or open a file or URL with its default handler, the way a
+/// double-click in Explorer does.
+fn launch(target: &str) {
+    use windows_sys::Win32::UI::Shell::ShellExecuteW;
+    use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+    let w = |s: &str| s.encode_utf16().chain(std::iter::once(0)).collect::<Vec<u16>>();
+    let (verb, file) = (w("open"), w(target.trim()));
+    let dir = std::path::Path::new(target.trim()).parent().filter(|p| p.is_dir()).map(|p| w(&p.to_string_lossy()));
+    unsafe {
+        ShellExecuteW(0, verb.as_ptr(), file.as_ptr(), std::ptr::null(), dir.as_ref().map(|d| d.as_ptr()).unwrap_or(std::ptr::null()), SW_SHOWNORMAL);
     }
 }
 

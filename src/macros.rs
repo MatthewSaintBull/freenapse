@@ -78,6 +78,23 @@ pub enum Event {
     Cursor(i16, i16),
     /// Bytes we could not decode (kept verbatim so re-writing is lossless).
     Raw(Vec<u8>),
+    /// Software only: the tray app types this text (Unicode key events, any layout).
+    Text(String),
+    /// Software only: the tray app starts this program, or opens this file or URL.
+    Launch(String),
+}
+
+impl Event {
+    /// A step the mouse cannot store: it is always played by the tray app.
+    pub fn software_only(&self) -> bool {
+        matches!(self, Event::Text(_) | Event::Launch(_))
+    }
+}
+
+/// True when any step needs the tray app, so the macro cannot live in the
+/// mouse's macro memory even on a mouse that has one.
+pub fn needs_software(events: &[Event]) -> bool {
+    events.iter().any(Event::software_only)
 }
 
 /// How a button plays the macro (Synapse's playback options).
@@ -145,6 +162,20 @@ pub fn button_name(code: u8) -> &'static str {
 /// Parse one config step. `press:x` and `click:x` expand to a down and an up.
 pub fn parse_event(spec: &str) -> Result<Vec<Event>, String> {
     let spec = spec.trim();
+    // Software-only steps keep their value as written (a path or a text may contain ':').
+    if let Some(t) = spec.strip_prefix("text:") {
+        if t.is_empty() {
+            return Err("text: needs the text to type, e.g. text:gg wp".into());
+        }
+        return Ok(vec![Event::Text(t.to_string())]);
+    }
+    if let Some(p) = spec.strip_prefix("launch:") {
+        let p = p.trim();
+        if p.is_empty() {
+            return Err("launch: needs a program, file or URL, e.g. launch:C:\\Tools\\obs64.exe".into());
+        }
+        return Ok(vec![Event::Launch(p.to_string())]);
+    }
     let (kind, arg) = spec.split_once(':').ok_or_else(|| format!("macro step '{spec}' needs a value, e.g. press:a or delay:50"))?;
     let arg = arg.trim();
     let key = || key_usage(arg).ok_or_else(|| format!("unknown key '{arg}'"));
@@ -180,7 +211,7 @@ pub fn parse_event(spec: &str) -> Result<Vec<Event>, String> {
             let bytes: Result<Vec<u8>, _> = (0..arg.len() / 2).map(|i| u8::from_str_radix(&arg[2 * i..2 * i + 2], 16)).collect();
             vec![Event::Raw(bytes.map_err(|_| format!("bad raw bytes '{arg}'"))?)]
         }
-        other => return Err(format!("unknown macro step '{other}' (down, up, press, mouse-down, mouse-up, click, scroll, delay, move)")),
+        other => return Err(format!("unknown macro step '{other}' (down, up, press, mouse-down, mouse-up, click, scroll, delay, move, text, launch)")),
     })
 }
 
@@ -204,6 +235,8 @@ pub fn event_spec(e: &Event) -> String {
         Event::Delay(ms) => format!("delay:{ms}"),
         Event::Cursor(x, y) => format!("move:{x},{y}"),
         Event::Raw(b) => format!("raw:{}", b.iter().map(|x| format!("{x:02x}")).collect::<String>()),
+        Event::Text(t) => format!("text:{t}"),
+        Event::Launch(p) => format!("launch:{p}"),
     }
 }
 
@@ -245,10 +278,21 @@ pub fn describe(events: &[Event]) -> String {
             Some(("scroll", d)) => format!("scroll {d}"),
             Some(("delay", ms)) => format!("{ms} ms"),
             Some(("move", v)) => format!("move {v}"),
+            Some(("text", t)) => format!("type \"{t}\""),
+            Some(("launch", p)) => format!("launch {}", launch_label(p)),
             _ => s.clone(),
         })
         .collect();
     parts.join(", ")
+}
+
+/// What a `launch:` step shows in lists: the file name of a path, a URL as is.
+pub fn launch_label(target: &str) -> String {
+    let t = target.trim();
+    if t.contains("://") {
+        return t.to_string();
+    }
+    t.rsplit(['\\', '/']).next().filter(|s| !s.is_empty()).unwrap_or(t).to_string()
 }
 
 fn cap(s: &str) -> String {
@@ -298,6 +342,8 @@ pub fn encode(events: &[Event]) -> Vec<u8> {
                 out.extend_from_slice(&[EV_CURSOR, x[0], x[1], y[0], y[1]]);
             }
             Event::Raw(b) => out.extend_from_slice(b),
+            // Nothing the mouse could store: such a macro is played by the tray app.
+            Event::Text(_) | Event::Launch(_) => {}
         }
     }
     out
@@ -516,5 +562,29 @@ mod tests {
         assert_eq!(&r.arguments[..6], &[0, 1, 0, 64, 0, 250]);
         let r = allocate(1, 300);
         assert_eq!(&r.arguments[..6], &[0, 1, 0, 0, 1, 44]);
+    }
+}
+
+#[cfg(test)]
+mod software_steps {
+    use super::*;
+
+    #[test]
+    fn text_and_launch_steps() {
+        assert_eq!(parse_event("text:gg wp: all").unwrap(), vec![Event::Text("gg wp: all".into())]);
+        assert_eq!(parse_event("launch:C:/Tools/obs64.exe").unwrap(), vec![Event::Launch("C:/Tools/obs64.exe".into())]);
+        assert_eq!(parse_event("launch:https://freenapse.app").unwrap(), vec![Event::Launch("https://freenapse.app".into())]);
+        assert!(parse_event("text:").is_err());
+        assert!(parse_event("launch:  ").is_err());
+        let ev = parse_events(&["press:a".into(), "text:hi".into(), "launch:notepad.exe".into()]).unwrap();
+        assert!(needs_software(&ev));
+        assert!(!needs_software(&parse_events(&["press:a".into()]).unwrap()));
+        // Round trip through the config text form.
+        assert_eq!(event_specs(&ev), vec!["press:a", "text:hi", "launch:notepad.exe"]);
+        // The mouse stores only what it can play itself.
+        assert_eq!(encode(&ev), vec![EV_KEY_DOWN, 4, EV_KEY_UP, 4]);
+        assert_eq!(describe(&ev), "A, type \"hi\", launch notepad.exe");
+        assert_eq!(launch_label("C:/Program Files/obs-studio/bin/64bit/obs64.exe"), "obs64.exe");
+        assert_eq!(launch_label("https://freenapse.app/guides/"), "https://freenapse.app/guides/");
     }
 }

@@ -23,6 +23,7 @@ pub mod protocol;
 pub mod sensor;
 pub mod tray;
 pub mod ui;
+pub mod update;
 
 use std::path::PathBuf;
 

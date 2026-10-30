@@ -58,9 +58,10 @@ its own profile.
 * HyperPolling dongle indicator LED mode
 * Onboard button remapping (profile 1, normal and Hypershift layer): mouse buttons, double-click, turbo, keyboard keys with modifiers, media keys, DPI stage/cycle, system sleep / power / wake, macros, Hypershift
 * Macros: record keys, mouse buttons, wheel and delays in the window (or write the steps in the config); played once / N times / while held / toggle / as a sequence. The Viper V3 Pro has no macro memory, so the tray app plays them, as Synapse does for this mouse (mice with macro memory get them stored onboard)
+* Program and Text buttons: a button starts a program (or opens a file or URL) or types a text, in any layout and with any characters; the tray app plays these like macros. Windows shortcuts such as Win+D need nothing special: they are keyboard keys, stored in the mouse
 * Game library and per-game profiles: the games installed with Steam, Epic Games, GOG, EA app, Battle.net, Riot, Ubisoft Connect, Rockstar and the Xbox app are listed automatically (read from the launchers' own files, no account or internet), and any other program can be picked with a file dialog; each game gets a DPI stage, polling rate and button layout, switched by the tray app with the foreground window
 * Dongle pairing: pair, cancel, unpair and auto-pairing
-* Tray icon with battery percentage, DPI stage and polling rate menu, low battery notification
+* Tray icon with battery percentage, DPI stage and polling rate menu, low battery notification. It reconnects the moment the dongle is plugged in or the PC wakes, writes the config file to the mouse when you edit it by hand, and once a day asks GitHub whether a newer release exists (the only network request it makes; `check_updates = false` turns it off)
 * Settings window in the style of a game client ((navigation pane with Customize / Performance / Calibration / Power / Games / Roadmap, Windows 11 style settings rows, game tiles with cover art; see DESIGN.md)): every change is written to the mouse as you make it, no apply button
 * Firmware versions and serial numbers of mouse and dongle
 
@@ -228,8 +229,7 @@ The code is plain Win32: SetupAPI enumeration, `HidD_SetFeature` /
 ## Not replicated
 
 Chroma lighting (the Viper V3 Pro has none), cloud profiles, Sensitivity
-Matcher, software-side bindings (launch a program, type text), firmware
-updates. The onboard profile selector (config, CLI, gear page) is there, but
+Matcher, firmware updates. The onboard profile selector (config, CLI, gear page) is there, but
 the Viper V3 Pro holds a single profile and refuses others, and Synapse's
 engine for this mouse has no surface calibration, so there is none here.
 See FEATURES.md, and ROADMAP.md for what the next releases aim to add.
