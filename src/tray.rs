@@ -45,6 +45,7 @@ struct App {
     hicon: HICON,
     config: Config,
     config_error: Option<String>,
+    config_load_error: Option<String>,
     mouse: Option<Mouse>,
     battery: Option<Battery>,
     stages: Option<DpiStages>,
@@ -107,7 +108,7 @@ pub fn run(open_settings: bool) {
         let (config, config_error) = if need_import {
             (Config::default(), None)
         } else {
-            match Config::load(&config_path()) {
+            match Config::load_structural(&config_path()) {
                 Ok(c) => (c, None),
                 Err(e) => (Config::default(), Some(e)),
             }
@@ -120,6 +121,7 @@ pub fn run(open_settings: bool) {
             nid: mem::zeroed(),
             hicon: 0,
             config,
+            config_load_error: config_error.clone(),
             config_error,
             mouse: None,
             battery: None,
@@ -244,12 +246,16 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
                 }
                 ui::WM_UI_CONFIG_CHANGED => {
                     // The settings window saved the config file (and wrote the mouse when wparam == 1).
-                    match Config::load(&config_path()) {
+                    match Config::load_structural(&config_path()) {
                         Ok(c) => {
                             (*app).config = c;
                             (*app).config_error = None;
+                            (*app).config_load_error = None;
                         }
-                        Err(e) => (*app).config_error = Some(e),
+                        Err(e) => {
+                            (*app).config_error = Some(e.clone());
+                            (*app).config_load_error = Some(e);
+                        }
                     }
                     load_soft_macros(&(*app).config);
                     (*app).config_applied = wparam == 1;
@@ -343,7 +349,10 @@ impl App {
     unsafe fn refresh(&mut self) {
         if self.mouse.is_none() {
             match Mouse::open() {
-                Ok(m) => self.mouse = Some(m),
+                Ok(m) => {
+                    self.mouse = Some(m);
+                    self.config_applied = false;
+                }
                 Err(e) => {
                     self.last_error = Some(e.to_string());
                     self.battery = None;
@@ -363,7 +372,8 @@ impl App {
             match imported {
                 Ok(cfg) => {
                     if let Err(e) = Config::write_new(&config_path(), &cfg) {
-                        self.config_error = Some(e);
+                        self.config_error = Some(e.clone());
+                        self.config_load_error = Some(e);
                     }
                     load_soft_macros(&cfg);
                     self.config = cfg;
@@ -378,6 +388,7 @@ impl App {
                 }
             }
         }
+        self.config_error = self.config.validation_error_for(self.mouse.as_ref().unwrap().spec(), self.config_load_error.as_deref());
         let need_apply = !self.config_applied && self.config_error.is_none();
         let wanted = self.wanted_polling();
         let result = {
@@ -435,6 +446,9 @@ impl App {
     /// config when it goes away. Like Synapse's in-game polling rate and
     /// per-game profiles, this is done by the tray app.
     unsafe fn check_game(&mut self) {
+        if self.config_error.is_some() {
+            return;
+        }
         if self.config.games.is_empty() && self.config.polling.games.is_empty() {
             return;
         }
@@ -457,6 +471,12 @@ impl App {
             return;
         };
         let cfg = &self.config;
+        if let Err(e) = cfg.validate_for(mouse.spec()) {
+            self.config_error = Some(e);
+            self.game_wanted = Some(wanted);
+            self.update_tray();
+            return;
+        }
         let over = wanted.as_deref().and_then(|g| cfg.game_by_key(g));
         let result: Result<(), crate::hid::HidError> = (|| {
             let polling = over.as_ref().map(|g| g.polling).unwrap_or(cfg.polling.rate);
@@ -494,6 +514,9 @@ impl App {
             (None, None) => "Mouse not found".to_string(),
         };
         AppendMenuW(menu, MF_STRING | MF_GRAYED, 0, wide(&status).as_ptr());
+        if let Some(e) = &self.config_error {
+            AppendMenuW(menu, MF_STRING | MF_GRAYED, 0, wide(&format!("Config error: {e}")).as_ptr());
+        }
         if let Some(e) = &self.last_error {
             if self.battery.is_none() {
                 AppendMenuW(menu, MF_STRING | MF_GRAYED, 0, wide(e).as_ptr());
@@ -540,12 +563,24 @@ impl App {
                 ui::open(self.hwnd);
             }
             ID_APPLY => {
-                match Config::load_or_create(&config_path()) {
+                let path = config_path();
+                let loaded = if path.exists() {
+                    Config::load_structural(&path)
+                } else if let Some(mouse) = self.mouse.as_ref() {
+                    Config::load_or_create_for(&path, mouse.spec())
+                } else {
+                    Config::load_or_create(&path)
+                };
+                match loaded {
                     Ok(c) => {
                         self.config = c;
                         self.config_error = None;
+                        self.config_load_error = None;
                     }
-                    Err(e) => self.config_error = Some(e),
+                    Err(e) => {
+                        self.config_error = Some(e.clone());
+                        self.config_load_error = Some(e);
+                    }
                 }
                 load_soft_macros(&self.config);
                 self.config_applied = false;
@@ -553,7 +588,10 @@ impl App {
             }
             ID_OPEN_CONFIG => {
                 let path = config_path();
-                let _ = Config::load_or_create(&path);
+                if !path.exists() {
+                    let _ = self.mouse.as_ref().map(|m| Config::load_or_create_for(&path, m.spec()))
+                        .unwrap_or_else(|| Config::load_or_create(&path));
+                }
                 ShellExecuteW(0, wide("open").as_ptr(), wide(&path.to_string_lossy()).as_ptr(), ptr::null(), ptr::null(), SW_SHOWNORMAL);
             }
             id if (ID_STAGE_BASE..ID_STAGE_BASE + 5).contains(&id) => {

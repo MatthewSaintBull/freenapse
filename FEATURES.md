@@ -48,7 +48,8 @@ the unverified rows come from OpenRazer's device list.
 | Viper V3 Pro, HyperSpeed / HyperPolling dongle | 0x00C1 | 0x1f | HyperPolling `00/40` | 125 .. 8000 | 35000 | ✅ | ✅ | the author |
 | HyperPolling wireless dongle (standalone) | 0x00B3 | 0x1f | HyperPolling | 125 .. 8000 | 30000 | ❓ | ✅ | nobody yet |
 | DeathAdder V4 Pro, wired / wireless | 0x00BE / 0x00BF | 0x1f | HyperPolling | 125 .. 8000 | 45000 | ❓ | wireless | nobody yet |
-| DeathAdder V3 Pro, wired / wireless | 0x00B6 / 0x00B7 | 0x1f | classic | 125, 500, 1000 | 35000 | ❓ | — | nobody yet |
+| DeathAdder V3 Pro, wired | 0x00B6 | 0x1f | classic `00/05` | 125, 500, 1000 | 30000 | ❓ (smart lift only) | — | owner (partial) |
+| DeathAdder V3 Pro, wireless | 0x00B7 | 0x1f (table assumption) | classic (unverified) | 125, 500, 1000 (unverified) | 30000 (manufacturer spec) | ❓ | — | nobody yet |
 | DeathAdder V3 (wired, 8K) | 0x00B2 | 0x1f | HyperPolling | 125 .. 8000 | 30000 | ❓ | — | nobody yet |
 | Viper V2 Pro, wired / wireless | 0x00A5 / 0x00A6 | 0x1f | classic | 125, 500, 1000 | 30000 | ❓ | — | nobody yet |
 | Viper V3 HyperSpeed | 0x00B8 | 0x1f | classic | 125, 500, 1000 | 30000 | ❓ | — | nobody yet |
@@ -63,6 +64,46 @@ nobody has checked whether that mouse has it, so the Calibration page is
 hidden. `freenapse probe` prints what any of these answers; `[device]
 allow_unverified = true` in the config lets the owner of an unverified mouse
 write to it at their own risk.
+
+### DeathAdder V3 Pro: partial wired write verification
+
+A live **wired** 0x1532:0x00B6 probe on firmware 1.0 answered at transaction
+id 0x1f. DPI X/Y and five DPI stages (1600 DPI), classic polling (1000 Hz),
+battery and charging, idle sleep, low-battery threshold, sensor state/lift/config
+(lift mode 1, height 1), maximum profiles (1), and the left button answered.
+A separate read of all seven physical button addresses on both normal and
+Hypershift layers succeeded (current mappings were defaults). The extended
+polling getter and macro-storage getter answered NotSupported; active-profile,
+sensor-angle and acceleration-state getters answered Failure. After the owner
+approved controlled tests, wired DPI (1600 → 1700 → 1600), classic polling
+(1000 → 500 → 1000 Hz), idle timeout (300 → 360 → 300 s), low-battery threshold
+(30 → 25 → 30%), and the normal-layer back button (back → forward → back)
+were written and read back at every step. Smart lift height changed from 2 mm
+to 1 mm and back using the lift command, also with readback. A freshly imported
+config applied with no differences, and `status` and all 14 button-layer reads
+succeeded. These checks do **not** establish that asymmetric tracking, arbitrary
+remaps, every DPI stage write, the settings window or wireless pairing work.
+The app avoids angle and acceleration reads/writes and hides those controls.
+The sensor tracking page stays disabled until its complete write plan and
+asymmetric mode are tested.
+
+The 30000 DPI ceiling comes from [Razer's DeathAdder V3 Pro product support
+page](https://mysupport.razer.com/app/answers/detail/a_id/6125/kw/mice)
+(Focus Pro 30K); this supersedes the earlier 35000 table value, which
+conflicts with that product's published specification. The wireless 0x00B7
+entry has **not** been observed in this probe: its transaction id, polling
+command/rates and sensor behavior are not confirmed. Windows did not enumerate
+a Razer receiver even after the owner's direct-port replug; pairing cannot be
+diagnosed through HID until the receiver enumerates. Do not infer HyperPolling
+support from the wired 0x00B6 result. Both entries remain `verified false`;
+explicit `[device] allow_unverified = true` is required for any writes.
+Newly imported/device-created wired configs use 1000 Hz for in-game polling;
+existing 8000 Hz profiles are rejected with an error instead of being silently
+changed or attempted during a game switch. An older config that omits
+`polling.game_rate` inherits its base `polling.rate`; an explicitly unsupported
+rate is rejected. Config validation errors do not replace the file: correct it
+and reopen the window (or use **Re-apply config** in the tray). **Re-import**
+rebuilds mouse settings but preserves the owner's `allow_unverified` choice.
 
 ## Feature map
 

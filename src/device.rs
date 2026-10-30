@@ -83,8 +83,8 @@ pub const DEVICES: &[DeviceSpec] = &[
     spec!(0x00B3, "Razer HyperPolling wireless dongle", wireless true, tid 0x1f, HyperPolling, RATES_HYPERPOLLING, dpi 30000, sensor false, pairing true, verified false),
     spec!(0x00BE, "Razer DeathAdder V4 Pro (wired)", wireless false, tid 0x1f, HyperPolling, RATES_HYPERPOLLING, dpi 45000, sensor false, pairing false, verified false),
     spec!(0x00BF, "Razer DeathAdder V4 Pro (wireless)", wireless true, tid 0x1f, HyperPolling, RATES_HYPERPOLLING, dpi 45000, sensor false, pairing true, verified false),
-    spec!(0x00B6, "Razer DeathAdder V3 Pro (wired)", wireless false, tid 0x1f, Classic, RATES_CLASSIC, dpi 35000, sensor false, pairing false, verified false),
-    spec!(0x00B7, "Razer DeathAdder V3 Pro (wireless)", wireless true, tid 0x1f, Classic, RATES_CLASSIC, dpi 35000, sensor false, pairing false, verified false),
+    spec!(0x00B6, "Razer DeathAdder V3 Pro (wired)", wireless false, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified false),
+    spec!(0x00B7, "Razer DeathAdder V3 Pro (wireless)", wireless true, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified false),
     spec!(0x00B2, "Razer DeathAdder V3", wireless false, tid 0x1f, HyperPolling, RATES_HYPERPOLLING, dpi 30000, sensor false, pairing false, verified false),
     spec!(0x00A5, "Razer Viper V2 Pro (wired)", wireless false, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified false),
     spec!(0x00A6, "Razer Viper V2 Pro (wireless)", wireless true, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified false),
@@ -99,6 +99,16 @@ pub const DEVICES: &[DeviceSpec] = &[
 ];
 
 impl DeviceSpec {
+    /// The V3 Pro's acceleration and angle getters failed on the observed wired
+    /// unit; do not expose or send either setter on either unverified variant.
+    pub fn supports_acceleration(&self) -> bool {
+        !matches!(self.product_id, 0x00B6 | 0x00B7)
+    }
+
+    pub fn supports_rotation(&self) -> bool {
+        !matches!(self.product_id, 0x00B6 | 0x00B7)
+    }
+
     /// The table row for a product id.
     pub fn find(product_id: u16) -> Option<&'static DeviceSpec> {
         DEVICES.iter().find(|d| d.product_id == product_id)
@@ -678,11 +688,17 @@ impl Mouse {
 
     /// Sensor rotation: (enabled, degrees).
     pub fn rotation(&self) -> Result<(bool, i8)> {
+        if !self.spec.supports_rotation() {
+            return Err(HidError::Unsupported("sensor rotation is not supported on this mouse"));
+        }
         let a = self.raw(&sensor::get_angle())?.arguments;
         Ok((a[1] != 0, a[2] as i8))
     }
 
     pub fn set_rotation(&self, degrees: i8) -> Result<()> {
+        if !self.spec.supports_rotation() {
+            return Err(HidError::Unsupported("sensor rotation is not supported on this mouse"));
+        }
         self.raw(&sensor::set_angle(degrees != 0, degrees)).map(drop)
     }
 
@@ -706,6 +722,9 @@ impl Mouse {
 
     /// (enabled, mode) stored in the mouse.
     pub fn acceleration(&self) -> Result<(bool, accel::Mode)> {
+        if !self.spec.supports_acceleration() {
+            return Err(HidError::Unsupported("Dynamic Sensitivity is not supported on this mouse"));
+        }
         let p = self.profile();
         let st = self.raw(&accel::get_state(p))?.arguments;
         let md = self.raw(&accel::get_mode(p))?.arguments;
@@ -715,6 +734,9 @@ impl Mouse {
     /// Write the acceleration settings in Synapse's order: state, then (when
     /// on) the mode, then the custom curve in 32 packets of 8 samples.
     pub fn set_acceleration(&self, on: bool, mode: accel::Mode, curve: Option<&[f32; accel::POINTS]>) -> Result<()> {
+        if !self.spec.supports_acceleration() {
+            return Err(HidError::Unsupported("Dynamic Sensitivity is not supported on this mouse"));
+        }
         let p = self.profile();
         self.raw(&accel::set_state(p, on))?;
         if !on {
@@ -734,6 +756,9 @@ impl Mouse {
 
     /// Read `count` samples of the stored custom curve starting at `offset`.
     pub fn acceleration_curve_chunk(&self, offset: u8, count: u8) -> Result<Vec<f32>> {
+        if !self.spec.supports_acceleration() {
+            return Err(HidError::Unsupported("Dynamic Sensitivity is not supported on this mouse"));
+        }
         let a = self.raw(&accel::get_curve_chunk(self.profile(), accel::Mode::Custom, offset, count))?.arguments;
         let n = (a[4] as usize).min(accel::CHUNK);
         Ok((0..n).map(|i| f32::from_le_bytes([a[5 + i * 4], a[6 + i * 4], a[7 + i * 4], a[8 + i * 4]])).collect())
@@ -955,6 +980,23 @@ mod tests {
         assert!(!u.is_known() && !u.verified && !u.wireless && !u.pairing && !u.sensor_tracking);
         assert_eq!((u.polling, u.dpi_max, u.transaction_id), (PollingStyle::Classic, 30000, TID_MOUSE));
         assert!(DeviceSpec::lookup(0x00B7).is_known());
+    }
+
+    #[test]
+    fn deathadder_wired_capabilities_are_conservative() {
+        let d = DeviceSpec::lookup(0x00B6);
+        assert!(!d.verified && !d.wireless);
+        assert!(!d.sensor_tracking, "successful sensor reads do not establish safe writes");
+        assert!(!d.supports_acceleration() && !d.supports_rotation());
+        assert_eq!((d.transaction_id, d.polling, d.polling_rates, d.dpi_max),
+            (0x1f, PollingStyle::Classic, &RATES_CLASSIC[..], 30000));
+        assert!(matches!(guard_write(&d, false, &cmd::set_polling_rate_classic(1)), Err(HidError::Unverified(_))));
+        assert!(guard_write(&d, true, &cmd::set_polling_rate_classic(1)).is_ok());
+        let wireless = DeviceSpec::lookup(0x00B7);
+        assert!(!wireless.verified && !wireless.supports_acceleration() && !wireless.supports_rotation());
+        assert!(!wireless.sensor_tracking);
+        assert!(DeviceSpec::viper_v3_pro().supports_acceleration());
+        assert!(DeviceSpec::viper_v3_pro().supports_rotation());
     }
 
     #[test]

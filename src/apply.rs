@@ -9,7 +9,7 @@ use crate::sensor;
 /// Build a config from what the mouse currently has stored, so the first run
 /// keeps the settings Synapse left behind instead of replacing them.
 pub fn import(mouse: &Mouse) -> Result<Config> {
-    let mut cfg = Config::default();
+    let mut cfg = Config::for_spec(mouse.spec());
 
     let st = mouse.dpi_stages()?;
     if !st.stages.is_empty() {
@@ -86,13 +86,13 @@ pub fn import(mouse: &Mouse) -> Result<Config> {
         }
     }
 
-    if cfg.validate().is_err() {
+    if cfg.validate_for(mouse.spec()).is_err() {
         // Something odd on the mouse: keep the parts that validate on their own.
-        let mut safe = Config::default();
+        let mut safe = Config::for_spec(mouse.spec());
         safe.dpi = cfg.dpi.clone();
         safe.polling.rate = cfg.polling.rate;
-        if safe.validate().is_err() {
-            safe = Config::default();
+        if safe.validate_for(mouse.spec()).is_err() {
+            safe = Config::for_spec(mouse.spec());
         }
         return Ok(safe);
     }
@@ -133,6 +133,9 @@ pub fn apply(mouse: &Mouse, cfg: &Config, polling_rate: u16) -> Result<Vec<Strin
     let mut changes = Vec::new();
     let spec = mouse.spec();
     cfg.validate_for(spec).map_err(HidError::Invalid)?;
+    if !spec.polling_rates.contains(&polling_rate) {
+        return Err(HidError::Invalid(format!("polling rate {polling_rate} is not one of {}", spec.rates_text())));
+    }
 
     // Everything profile-bound below (buttons, acceleration) goes to this profile.
     if mouse.profile() != cfg.profile.active {
@@ -181,7 +184,7 @@ pub fn apply(mouse: &Mouse, cfg: &Config, polling_rate: u16) -> Result<Vec<Strin
         }
     }
 
-    if accel_differs(mouse, cfg)? {
+    if spec.supports_acceleration() && accel_differs(mouse, cfg)? {
         let mode = cfg.acceleration.mode().map_err(|_| HidError::Unsupported("invalid [acceleration] section"))?;
         let samples = cfg.acceleration.samples();
         mouse.set_acceleration(cfg.acceleration.enabled, mode, Some(&samples))?;
@@ -189,16 +192,18 @@ pub fn apply(mouse: &Mouse, cfg: &Config, polling_rate: u16) -> Result<Vec<Strin
     }
 
     let want_rot = cfg.sensor.rotation;
-    match mouse.rotation() {
-        Ok((rot_on, rot_deg)) => {
-            if rot_on != (want_rot != 0) || (rot_on && rot_deg != want_rot) {
-                mouse.set_rotation(want_rot)?;
-                changes.push(format!("rotation -> {want_rot} deg"));
+    if spec.supports_rotation() {
+        match mouse.rotation() {
+            Ok((rot_on, rot_deg)) => {
+                if rot_on != (want_rot != 0) || (rot_on && rot_deg != want_rot) {
+                    mouse.set_rotation(want_rot)?;
+                    changes.push(format!("rotation -> {want_rot} deg"));
+                }
             }
+            Err(e) if spec.sensor_tracking => return Err(e),
+            // Angle tune is part of the sensor page: left alone where that page is unknown.
+            Err(_) => {}
         }
-        Err(e) if spec.sensor_tracking => return Err(e),
-        // Angle tune is part of the sensor page: left alone where that page is unknown.
-        Err(_) => {}
     }
 
     if spec.pairing && mouse.dongle_led_mode().ok() != Some(cfg.dongle.led) {

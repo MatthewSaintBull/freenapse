@@ -103,6 +103,15 @@ fn is_gone(e: &HidError) -> bool {
     matches!(e, HidError::Win32(..) | HidError::NotFound)
 }
 
+/// A failed exchange may still have a stale HID handle; never trust its spec.
+fn usable_spec(spec: Option<DeviceSpec>, gone: bool) -> Option<DeviceSpec> {
+    if gone { None } else { spec }
+}
+
+fn is_asleep_error(e: &HidError) -> bool {
+    matches!(e, HidError::Status(crate::protocol::Status::Timeout) | HidError::NoResponse)
+}
+
 const CLASS_NAME: &str = "freenapse-settings";
 const WM_MOUSELEAVE: u32 = 0x02A3;
 const TIMER_TICK: usize = 1;
@@ -409,6 +418,7 @@ pub struct Ui {
     /// Last config that validated and was saved; a rejected change goes back to it.
     last_good: Config,
     cfg_error: Option<String>,
+    cfg_load_error: Option<String>,
     /// Queue of the mouse I/O thread (see [`Dev`]); the window itself never waits for USB.
     io: Option<mpsc::Sender<Job>>,
     /// Jobs sent to the I/O thread and not finished yet.
@@ -425,6 +435,7 @@ pub struct Ui {
     pub(crate) wireless: bool,
     /// What the device table says about the open mouse (the Viper V3 Pro until one is open).
     pub(crate) spec: DeviceSpec,
+    spec_known: bool,
     pub(crate) asleep: bool,
     widgets: Vec<Widget>,
     edits: Vec<EditCtl>,
@@ -575,6 +586,7 @@ unsafe fn create(owner: HWND) -> HWND {
         cfg: Config::default(),
         last_good: Config::default(),
         cfg_error: None,
+        cfg_load_error: None,
         io: None,
         io_busy: 0,
         reading: false,
@@ -586,6 +598,7 @@ unsafe fn create(owner: HWND) -> HWND {
         serial: None,
         wireless: true,
         spec: DeviceSpec::default(),
+        spec_known: false,
         asleep: false,
         widgets: Vec::new(),
         edits: Vec::new(),
@@ -882,14 +895,16 @@ impl Ui {
     fn load_config(&mut self) {
         let path = config_path();
         if path.exists() {
-            match Config::load(&path) {
+            match Config::load_structural(&path) {
                 Ok(c) => {
                     self.cfg = c;
                     self.cfg_error = None;
+                    self.cfg_load_error = None;
                 }
                 Err(e) => {
                     self.cfg = Config::default();
-                    self.cfg_error = Some(e);
+                    self.cfg_error = Some(e.clone());
+                    self.cfg_load_error = Some(e);
                 }
             }
         } else if let Ok(m) = Mouse::open() {
@@ -921,11 +936,19 @@ impl Ui {
         self.io(move |dev| {
             let res = dev.mouse().and_then(|m| m.battery());
             dev.check(&res);
-            let spec = dev.mouse.as_ref().map(|m| m.spec().clone());
+            let spec = usable_spec(dev.mouse.as_ref().map(|m| m.spec().clone()), res.as_ref().err().is_some_and(is_gone));
             Box::new(move |ui: &mut Ui| {
                 if let Some(spec) = spec {
                     ui.wireless = spec.wireless;
                     ui.spec = spec;
+                    ui.spec_known = true;
+                    ui.cfg_error = ui.cfg.validation_error_for(&ui.spec, ui.cfg_load_error.as_deref());
+                    if let Some(e) = ui.cfg_error.clone() {
+                        ui.set_status(&format!("Config file error: {e}"), ERR);
+                    }
+                } else {
+                    ui.spec_known = false;
+                    ui.spec = DeviceSpec::default();
                 }
                 let awake = res.is_ok();
                 match res {
@@ -956,7 +979,14 @@ impl Ui {
     /// Firmware, serial, profiles, macro memory and the dongle's pairings.
     fn read_details(&mut self, ident: bool, pair: bool) {
         self.io(move |dev| {
-            let Ok(m) = dev.mouse() else { return Box::new(|ui: &mut Ui| ui.reading = false) };
+            let Ok(m) = dev.mouse() else {
+                return Box::new(|ui: &mut Ui| {
+                    ui.reading = false;
+                    ui.connected = false;
+                    ui.spec_known = false;
+                    ui.spec = DeviceSpec::default();
+                });
+            };
             let ident = ident.then(|| (m.firmware().ok(), m.dongle_firmware().ok(), m.serial().ok(), m.profiles().ok(), m.macro_storage().ok(), m.macro_support().ok()));
             let paired = if pair && m.is_wireless() { Some(m.paired_devices().ok()) } else { None };
             let auto = if paired.is_some() { dev.auto_pairing() } else { None };
@@ -1962,7 +1992,7 @@ impl Ui {
         match id {
             Id::StageValue(i) => {
                 if let Ok(v) = text.parse::<i32>() {
-                    let v = v.clamp(100, 35000);
+                    let v = v.clamp(100, self.spec.dpi_max as i32);
                     if self.cfg.dpi.stages.get(i).copied() != Some(v as u16) {
                         self.changed(id, v);
                         return;
@@ -1971,7 +2001,7 @@ impl Ui {
             }
             Id::StageY(i) => {
                 if let Ok(v) = text.parse::<i32>() {
-                    let v = v.clamp(100, 35000);
+                    let v = v.clamp(100, self.spec.dpi_max as i32);
                     if self.cfg.dpi.y_stages.get(i).copied() != Some(v as u16) {
                         self.changed(id, v);
                         return;
@@ -2373,7 +2403,7 @@ impl Ui {
                 let d = &mut self.cfg.dpi;
                 while d.stages.len() < n {
                     let last = *d.stages.last().unwrap_or(&800);
-                    d.stages.push(last.saturating_mul(2).clamp(100, 35000));
+                    d.stages.push(last.saturating_mul(2).clamp(100, self.spec.dpi_max));
                 }
                 d.stages.truncate(n);
                 d.active = d.active.clamp(1, n as u8);
@@ -2381,7 +2411,7 @@ impl Ui {
             }
             Id::StageValue(i) => {
                 if let Some(s) = self.cfg.dpi.stages.get_mut(i) {
-                    *s = v.clamp(100, 35000) as u16;
+                    *s = v.clamp(100, self.spec.dpi_max as i32) as u16;
                 }
                 Write::Stages
             }
@@ -2391,7 +2421,7 @@ impl Ui {
                     d.y_stages = d.stages.clone();
                 }
                 if let Some(s) = d.y_stages.get_mut(i) {
-                    *s = v.clamp(100, 35000) as u16;
+                    *s = v.clamp(100, self.spec.dpi_max as i32) as u16;
                 }
                 Write::Stages
             }
@@ -2695,7 +2725,10 @@ impl Ui {
             }
             Id::OpenConfig => {
                 let path = config_path();
-                let _ = Config::load_or_create(&path);
+                if !path.exists() {
+                    let _ = if self.spec_known { Config::load_or_create_for(&path, &self.spec) }
+                        else { Config::load_or_create(&path) };
+                }
                 ShellExecuteW(0, wide("open").as_ptr(), wide(&path.to_string_lossy()).as_ptr(), ptr::null(), ptr::null(), SW_SHOWNORMAL);
                 return;
             }
@@ -2825,7 +2858,19 @@ impl Ui {
     /// change the config rejects (for example losing the last left click) is
     /// undone in the window too.
     unsafe fn commit(&mut self, write: Write) {
-        if let Err(e) = self.cfg.validate() {
+        if let Some(e) = self.cfg_error.clone() {
+            self.set_status(&format!("Not changed: fix the config file error first: {e}"), ERR);
+            self.cfg = self.last_good.clone();
+            self.layout();
+            return;
+        }
+        if !self.spec_known {
+            self.set_status("Not changed: connect the mouse to validate its settings first", ERR);
+            self.cfg = self.last_good.clone();
+            self.layout();
+            return;
+        }
+        if let Err(e) = self.cfg.validate_for(&self.spec) {
             self.set_status(&format!("Not changed: {e}"), ERR);
             self.cfg = self.last_good.clone();
             self.key_mode = None;
@@ -2866,6 +2911,7 @@ impl Ui {
     /// Write one change to the mouse (runs on the I/O thread).
     fn write_to(m: &Mouse, cfg: &Config, write: Write) -> Result<(), HidError> {
         let cfg = cfg.clone();
+        cfg.validate_for(m.spec()).map_err(HidError::Invalid)?;
         let result: Result<(), HidError> = (|| {
             match write {
                 Write::None => {}
@@ -2970,6 +3016,8 @@ impl Ui {
             Err(HidError::Win32(..)) | Err(HidError::NotFound) => {
                 self.connected = false;
                 self.battery = None;
+                self.spec_known = false;
+                self.spec = DeviceSpec::default();
                 self.pending = true;
                 self.set_status("Saved. Mouse not connected: it will be applied when it is back", WARN);
                 false
@@ -2978,10 +3026,24 @@ impl Ui {
                 self.set_status(&format!("Saved, but the mouse rejected it: {e}"), ERR);
                 false
             }
-            Err(_) => {
+            Err(HidError::Invalid(e)) => {
+                // The I/O thread may have opened a different model since the edit.
+                self.spec_known = false;
+                self.spec = DeviceSpec::default();
+                self.set_status(&format!("Not applied: {e}"), ERR);
+                self.read_live(true);
+                false
+            }
+            Err(e) if is_asleep_error(&e) => {
                 self.asleep = true;
                 self.pending = true;
                 self.set_status("Saved. The mouse is asleep: move it and the change will be applied", WARN);
+                false
+            }
+            Err(e) => {
+                self.asleep = false;
+                self.pending = false;
+                self.set_status(&format!("Saved to config, but not applied to the mouse: {e}"), ERR);
                 false
             }
         };
@@ -3006,6 +3068,11 @@ impl Ui {
 
     /// Push the whole config once the mouse answers again (in the background).
     unsafe fn retry_pending(&mut self) {
+        if let Some(e) = self.cfg_error.clone() {
+            self.pending = false;
+            self.set_status(&format!("Not applied: fix the config file error first: {e}"), ERR);
+            return;
+        }
         if self.retrying {
             return;
         }
@@ -3027,8 +3094,17 @@ impl Ui {
                         }
                         ui.read_live(false);
                     }
-                    Err(e) if is_gone(&e) => ui.connected = false,
-                    Err(_) => {}
+                    Err(e) if is_gone(&e) => {
+                        ui.connected = false;
+                        ui.spec_known = false;
+                        ui.spec = DeviceSpec::default();
+                    }
+                    Err(e) if is_asleep_error(&e) => {}
+                    Err(e) => {
+                        ui.pending = false;
+                        ui.asleep = false;
+                        ui.set_status(&format!("Not applied to the mouse: {e}"), ERR);
+                    }
                 }
                 ui.repaint();
             })
@@ -3042,10 +3118,12 @@ impl Ui {
             dev.check(&result);
             Box::new(move |ui: &mut Ui| {
                 match result {
-                    Ok(cfg) => {
+                    Ok(mut cfg) => {
+                        cfg.preserve_device_access(&config_path());
                         ui.cfg = cfg;
                         ui.last_good = ui.cfg.clone();
                         ui.cfg_error = None;
+                        ui.cfg_load_error = None;
                         ui.pending = false;
                         if let Err(e) = Config::write_new(&config_path(), &ui.cfg) {
                             ui.set_status(&e, ERR);
@@ -3078,5 +3156,26 @@ impl Ui {
 
     pub(crate) fn is_recording(&self) -> bool {
         self.recording.is_some()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejected_write_is_not_a_sleeping_mouse() {
+        assert!(!is_asleep_error(&HidError::Unverified("read-only".into())));
+        assert!(!is_asleep_error(&HidError::Status(crate::protocol::Status::Failure)));
+        assert!(is_asleep_error(&HidError::Status(crate::protocol::Status::Timeout)));
+        assert!(is_asleep_error(&HidError::NoResponse));
+    }
+
+    #[test]
+    fn device_loss_invalidates_the_known_spec_even_with_a_stale_handle() {
+        let spec = DeviceSpec::lookup(0x00B6);
+        assert_eq!(usable_spec(Some(spec.clone()), false), Some(spec.clone()));
+        assert_eq!(usable_spec(Some(spec), true), None);
+        assert_eq!(usable_spec(None, false), None);
     }
 }

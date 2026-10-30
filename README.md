@@ -11,6 +11,9 @@ A tiny Rust replacement for Razer Synapse, built for the **Razer Viper V3 Pro**
 (wired, or through the HyperSpeed / HyperPolling dongle). Download, changelog and
 guides: **https://freenapse.app**.
 
+Experimental support for other mice, including the wired DeathAdder V3 Pro,
+is listed under [Supported mice](FEATURES.md#supported-mice).
+
 ![The Customize page: button assignment with the mouse drawing](assets/screenshot-customize.png)
 
 Synapse 4 on this machine runs as 11 Electron processes using about 1.5 GB of RAM

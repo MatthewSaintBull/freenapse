@@ -133,7 +133,7 @@ fn run(cmd: &str, args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         }
         "games" => {
             // Installed games found in the launchers, and which ones have a profile.
-            let cfg = Config::load(&config_path()).unwrap_or_default();
+            let cfg = Config::load_structural(&config_path()).unwrap_or_default();
             let games = freenapse::library::scan();
             for g in &games {
                 let profile = cfg.games.iter().find(|p| p.matches(&format!("{}\\{}", g.dir, if g.exe.is_empty() { "?" } else { &g.exe })));
@@ -158,14 +158,15 @@ fn run(cmd: &str, args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     match cmd {
         "status" => status(&mouse)?,
         "import" => {
-            let cfg = apply::import(&mouse)?;
+            let mut cfg = apply::import(&mouse)?;
             let p = config_path();
+            cfg.preserve_device_access(&p);
             Config::write_new(&p, &cfg)?;
             println!("wrote {}", p.display());
             print!("{}", cfg.render());
         }
         "apply" => {
-            let cfg = Config::load_or_create(&config_path())?;
+            let cfg = Config::load_or_create_for(&config_path(), mouse.spec())?;
             let changes = apply::apply(&mouse, &cfg, cfg.polling.rate)?;
             if changes.is_empty() {
                 println!("mouse already matches the config");
@@ -267,7 +268,7 @@ fn run(cmd: &str, args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         }
         "macro-write" => {
             let id: u16 = arg(args, 0, "macro id")?;
-            let cfg = Config::load_or_create(&config_path())?;
+            let cfg = Config::load_or_create_for(&config_path(), mouse.spec())?;
             let m = cfg.macro_by_id(id).ok_or_else(|| format!("macro {id} is not in the config file"))?;
             let bytes = m.bytes();
             mouse.write_macro(id, &m.name, &bytes)?;
@@ -315,7 +316,7 @@ fn run(cmd: &str, args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
                 mouse.set_acceleration(false, freenapse::accel::Mode::Classic, None)?;
             } else {
                 let mode = freenapse::accel::Mode::from_name(what).ok_or("dynamic off|classic|natural|jump|custom")?;
-                let cfg = Config::load_or_create(&config_path())?;
+                let cfg = Config::load_or_create_for(&config_path(), mouse.spec())?;
                 let samples = cfg.acceleration.samples();
                 mouse.set_acceleration(true, mode, Some(&samples))?;
             }

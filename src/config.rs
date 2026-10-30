@@ -10,7 +10,7 @@ use crate::device::{ButtonFunction, mouse_button_name};
 use crate::macros::Playback;
 use crate::sensor::Tracking;
 
-pub const DEFAULT_TOML: &str = r#"# freenapse configuration for the Razer Viper V3 Pro.
+pub const DEFAULT_TOML: &str = r#"# freenapse configuration for a Razer mouse.
 # Everything here is written to the mouse's onboard memory, so it also
 # applies on other computers without any software running.
 
@@ -22,7 +22,7 @@ pub const DEFAULT_TOML: &str = r#"# freenapse configuration for the Razer Viper 
 allow_unverified = false
 
 [dpi]
-# Up to 5 stages, cycled with the button under the mouse. Range 100..35000.
+# Up to 5 stages. Range starts at 100 DPI; maximum depends on the mouse.
 stages = [400, 800, 1600, 3200, 6400]
 # 1-based index of the stage to activate.
 active = 2
@@ -30,10 +30,12 @@ active = 2
 y_stages = []
 
 [polling]
-# Report rate in Hz: 125, 250, 500, 1000, 2000, 4000 or 8000 (8000 needs the HyperPolling dongle).
+# Report rate in Hz: available values depend on the mouse and dongle.
 rate = 1000
 # Optional: rate to switch to while one of the listed executables is in the foreground
 # (the tray app does this, like Synapse's "in-game polling rate"). Higher rates drain the battery faster.
+# New configs imported from a mouse use a rate that device supports.
+# Existing configs must use a rate supported by the connected mouse.
 game_rate = 8000
 games = []          # e.g. ["cs2.exe", "valorant-win64-shipping.exe"]
 
@@ -339,12 +341,32 @@ impl Default for TrayConfig {
 }
 
 impl Config {
+    /// Defaults for a freshly imported device.
+    pub fn for_spec(spec: &crate::device::DeviceSpec) -> Config {
+        let mut cfg = Config::default();
+        if !spec.polling_rates.contains(&cfg.polling.game_rate) {
+            cfg.polling.game_rate = cfg.polling.rate;
+        }
+        cfg
+    }
+
     /// Load the config, creating a commented default file if none exists.
     pub fn load_or_create(path: &Path) -> Result<Config, String> {
         if !path.exists() {
             Self::write_new(path, &Config::default())?;
         }
         Self::load(path)
+    }
+
+    /// Create a supported template for an already identified mouse; never
+    /// silently change an existing user's polling or DPI choices.
+    pub fn load_or_create_for(path: &Path, spec: &crate::device::DeviceSpec) -> Result<Config, String> {
+        if !path.exists() {
+            Self::write_new(path, &Config::for_spec(spec))?;
+        }
+        let cfg = Self::load_structural(path)?;
+        cfg.validate_for(spec)?;
+        Ok(cfg)
     }
 
     /// Write `cfg` as a fresh, commented config file (the default template with values substituted).
@@ -356,9 +378,34 @@ impl Config {
     }
 
     pub fn load(path: &Path) -> Result<Config, String> {
-        let text = std::fs::read_to_string(path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
-        let cfg: Config = toml::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+        let cfg = Self::load_structural(path)?;
         cfg.validate()?;
+        Ok(cfg)
+    }
+
+    /// Validate structural invariants against the union of known device ranges;
+    /// this cannot replace validation against the device actually connected.
+    fn validate_without_device(&self) -> Result<(), String> {
+        let mut bounds = crate::device::DeviceSpec::viper_v3_pro().clone();
+        bounds.dpi_max = crate::device::DEVICES.iter().map(|s| s.dpi_max).max().unwrap_or(bounds.dpi_max);
+        bounds.polling_rates = &crate::device::RATES_HYPERPOLLING;
+        self.validate_for(&bounds)
+    }
+
+    /// Parse without assuming one model's DPI/rate limits. Still reject invalid
+    /// stages, profiles and bindings before a tray/window can render them.
+    /// Call validate_for on the identified device before applying or saving edits.
+    pub fn load_structural(path: &Path) -> Result<Config, String> {
+        let text = std::fs::read_to_string(path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+        let value: toml::Value = toml::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+        let missing_game_rate = value.get("polling").and_then(|p| p.get("game_rate")).is_none();
+        let mut cfg: Config = value.try_into().map_err(|e| format!("{}: {e}", path.display()))?;
+        if missing_game_rate {
+            // A legacy config inherits its own base rate, not the Viper's 8000 Hz
+            // default. Explicit 8000 must remain explicit and fail on classic mice.
+            cfg.polling.game_rate = cfg.polling.rate;
+        }
+        cfg.validate_without_device()?;
         Ok(cfg)
     }
 
@@ -369,15 +416,24 @@ impl Config {
         std::fs::read_to_string(path).ok().and_then(|t| toml::from_str::<Config>(&t).ok()).map(|c| c.device.allow_unverified).unwrap_or(false)
     }
 
+    /// Import replaces mouse settings, not the owner's explicit write permission.
+    pub fn preserve_device_access(&mut self, path: &Path) {
+        self.device.allow_unverified = Self::allow_unverified_at(path);
+    }
+
     /// Validate against the Viper V3 Pro's ranges (what the file is checked
     /// against when no mouse is open). With a mouse open use [`Config::validate_for`].
     pub fn validate(&self) -> Result<(), String> {
         self.validate_for(crate::device::DeviceSpec::viper_v3_pro())
     }
 
-    /// Validate with the DPI range and polling rates of this mouse. The in-game
-    /// rates only need a code the protocol knows: they are checked against the
-    /// mouse when the tray app switches to them.
+    /// Recompute model-specific errors on every identity check, but keep a
+    /// structural/file error until the file is successfully reloaded.
+    pub(crate) fn validation_error_for(&self, spec: &crate::device::DeviceSpec, load_error: Option<&str>) -> Option<String> {
+        load_error.map(str::to_owned).or_else(|| self.validate_for(spec).err())
+    }
+
+    /// Validate all rates before any apply or game switch, not only the base rate.
     pub fn validate_for(&self, spec: &crate::device::DeviceSpec) -> Result<(), String> {
         if self.dpi.stages.is_empty() || self.dpi.stages.len() > 5 {
             return Err("dpi.stages must have 1 to 5 entries".into());
@@ -395,12 +451,14 @@ impl Config {
         }
         self.acceleration.mode()?;
         crate::accel::validate_points(&self.acceleration.curve).map_err(|e| format!("[acceleration] {e}"))?;
+        if !spec.supports_acceleration() && self.acceleration.enabled {
+            return Err(format!("Dynamic Sensitivity is not supported on the {}", spec.name));
+        }
         if !spec.polling_rates.contains(&self.polling.rate) {
             return Err(format!("polling rate {} is not one of {}", self.polling.rate, spec.rates_text()));
         }
-        let any_rate = crate::device::RATES_HYPERPOLLING;
-        if !any_rate.contains(&self.polling.game_rate) {
-            return Err(format!("polling rate {} is not one of 125/250/500/1000/2000/4000/8000", self.polling.game_rate));
+        if !spec.polling_rates.contains(&self.polling.game_rate) {
+            return Err(format!("in-game polling rate {} is not one of {}", self.polling.game_rate, spec.rates_text()));
         }
         if !(60..=900).contains(&self.power.idle_seconds) {
             return Err("power.idle_seconds must be 60..900".into());
@@ -411,6 +469,9 @@ impl Config {
         self.tracking()?;
         if !(-30..=30).contains(&self.sensor.rotation) {
             return Err("sensor.rotation must be -30..30".into());
+        }
+        if !spec.supports_rotation() && self.sensor.rotation != 0 {
+            return Err(format!("sensor.rotation is not supported on the {}", spec.name));
         }
         if !(1..=3).contains(&self.dongle.led) {
             return Err("dongle.led must be 1, 2 or 3".into());
@@ -458,8 +519,8 @@ impl Config {
                 }
             }
             if let Some(p) = g.polling {
-                if !any_rate.contains(&p) {
-                    return Err(format!("[[games]] {}: polling rate {p} is not one of 125/250/500/1000/2000/4000/8000", g.label()));
+                if !spec.polling_rates.contains(&p) {
+                    return Err(format!("[[games]] {}: polling rate {p} is not one of {}", g.label(), spec.rates_text()));
                 }
             }
             for (k, v) in &g.buttons {
@@ -1018,6 +1079,16 @@ mod tests {
     }
 
     #[test]
+    fn reimport_keeps_explicit_device_write_opt_in() {
+        let path = std::env::temp_dir().join(format!("freenapse-opt-in-{}.toml", std::process::id()));
+        std::fs::write(&path, "[device]\nallow_unverified = true\n").unwrap();
+        let mut imported = Config::default();
+        imported.preserve_device_access(&path);
+        assert!(imported.device.allow_unverified);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
     fn validate_against_a_spec() {
         use crate::device::DeviceSpec;
         let mut c = Config::default();
@@ -1025,12 +1096,13 @@ mod tests {
         c.dpi.active = 1;
         c.validate().unwrap();
         let wired = DeviceSpec::lookup(0x00C0);
+        c.polling.game_rate = 1000;
         c.validate_for(&wired).unwrap();
         // A smaller sensor refuses the top stage, with its own maximum in the message.
         let small = DeviceSpec::lookup(0x00A6);
         let e = c.validate_for(&small).unwrap_err();
         assert!(e.contains("35000") && e.contains("30000"), "{e}");
-        // The classic polling command has no 2000 Hz; the in-game rate is not held to the mouse's list.
+        // The classic polling command has no 2000 Hz, even for game rates.
         c.dpi.stages = vec![400];
         c.polling.rate = 2000;
         c.validate().unwrap();
@@ -1038,13 +1110,110 @@ mod tests {
         assert!(e.contains("2000") && e.contains("125/500/1000"), "{e}");
         c.polling.rate = 1000;
         c.polling.game_rate = 8000;
-        c.validate_for(&wired).unwrap();
+        assert!(c.validate_for(&wired).is_err());
         c.polling.game_rate = 3000;
         assert!(c.validate_for(&wired).is_err());
         // The unknown fallback is held to its own, conservative ranges.
-        c.polling.game_rate = 8000;
+        c.polling.game_rate = 1000;
         c.dpi.stages = vec![30001];
         assert!(c.validate_for(&DeviceSpec::unknown(0x0123)).is_err());
+    }
+
+    #[test]
+    fn deathadder_defaults_and_game_rates_are_device_specific() {
+        use crate::device::DeviceSpec;
+        let d = DeviceSpec::lookup(0x00B6);
+        let mut c = Config::for_spec(&d);
+        assert_eq!(c.polling.game_rate, 1000);
+        c.validate_for(&d).unwrap();
+        c.polling.game_rate = 8000;
+        assert!(c.validate_for(&d).unwrap_err().contains("125/500/1000"));
+        c.polling.game_rate = 1000;
+        c.games.push(GameConfig { exe: "game.exe".into(), polling: Some(4000), ..Default::default() });
+        assert!(c.validate_for(&d).unwrap_err().contains("125/500/1000"));
+        c.games[0].polling = Some(500);
+        c.validate_for(&d).unwrap();
+        assert_eq!(Config::for_spec(DeviceSpec::viper_v3_pro()).polling.game_rate, 8000);
+    }
+
+    #[test]
+    fn new_config_for_wired_deathadder_uses_supported_rate() {
+        let path = std::env::temp_dir().join(format!("freenapse-da-config-{}.toml", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let d = crate::device::DeviceSpec::lookup(0x00B6);
+        let c = Config::load_or_create_for(&path, &d).unwrap();
+        assert_eq!(c.polling.game_rate, 1000);
+        assert!(std::fs::read_to_string(&path).unwrap().contains("game_rate = 1000"));
+        let mut invalid = c.clone();
+        invalid.polling.game_rate = 8000;
+        Config::write_new(&path, &invalid).unwrap();
+        assert!(Config::load_or_create_for(&path, &d).unwrap_err().contains("in-game polling rate"));
+        assert!(std::fs::read_to_string(&path).unwrap().contains("game_rate = 8000"), "an existing config is never silently changed");
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn validation_error_tracks_device_identity_without_losing_file_errors() {
+        let wired = crate::device::DeviceSpec::lookup(0x00B6);
+        let viper = crate::device::DeviceSpec::viper_v3_pro();
+        let cfg = Config::default(); // 8000 Hz in-game: valid on Viper, not wired DeathAdder.
+        assert!(cfg.validation_error_for(&wired, None).unwrap().contains("in-game polling rate"));
+        assert_eq!(cfg.validation_error_for(viper, None), None);
+        assert!(cfg.validation_error_for(&wired, None).is_some());
+        assert_eq!(cfg.validation_error_for(viper, Some("malformed file")), Some("malformed file".into()));
+    }
+
+    #[test]
+    fn device_specific_load_does_not_reject_larger_supported_dpi() {
+        let path = std::env::temp_dir().join(format!("freenapse-wide-config-{}.toml", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let spec = crate::device::DeviceSpec::lookup(0x00BE);
+        let mut cfg = Config::for_spec(&spec);
+        cfg.dpi.stages = vec![40000];
+        cfg.dpi.active = 1;
+        Config::write_new(&path, &cfg).unwrap();
+        assert_eq!(Config::load_structural(&path).unwrap().dpi.stages, vec![40000]);
+        assert_eq!(Config::load_or_create_for(&path, &spec).unwrap().dpi.stages, vec![40000]);
+        let original = std::fs::read_to_string(&path).unwrap();
+        assert!(Config::load_or_create_for(&path, crate::device::DeviceSpec::viper_v3_pro()).unwrap_err().contains("35000"));
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), original);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn omitted_game_rate_uses_base_rate_but_explicit_unsupported_rate_is_rejected() {
+        let path = std::env::temp_dir().join(format!("freenapse-legacy-config-{}.toml", std::process::id()));
+        let spec = crate::device::DeviceSpec::lookup(0x00B6);
+        let legacy = "[dpi]\nstages = [800]\nactive = 1\n[polling]\nrate = 500\n";
+        std::fs::write(&path, legacy).unwrap();
+        assert_eq!(Config::load_structural(&path).unwrap().polling.game_rate, 500);
+        assert_eq!(Config::load_or_create_for(&path, &spec).unwrap().polling.game_rate, 500);
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), legacy);
+        let explicit = format!("{legacy}game_rate = 8000\n");
+        std::fs::write(&path, &explicit).unwrap();
+        assert_eq!(Config::load_structural(&path).unwrap().polling.game_rate, 8000);
+        assert!(Config::load_or_create_for(&path, &spec).unwrap_err().contains("in-game polling rate 8000"));
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), explicit);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn structural_load_rejects_invalid_layout_before_ui_can_render_it() {
+        let path = std::env::temp_dir().join(format!("freenapse-invalid-layout-{}.toml", std::process::id()));
+        std::fs::write(&path, "[dpi]\nstages = []\n").unwrap();
+        assert!(Config::load_structural(&path).unwrap_err().contains("dpi.stages"));
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn deathadder_does_not_accept_unsupported_features() {
+        let d = crate::device::DeviceSpec::lookup(0x00B6);
+        let mut c = Config::for_spec(&d);
+        c.acceleration.enabled = true;
+        assert!(c.validate_for(&d).unwrap_err().contains("Dynamic Sensitivity"));
+        c.acceleration.enabled = false;
+        c.sensor.rotation = 5;
+        assert!(c.validate_for(&d).unwrap_err().contains("rotation"));
     }
 
     #[test]
