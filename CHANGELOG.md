@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 (2026-10-30)
 
 - A device table (`src/device.rs`, `DeviceSpec`) drives what freenapse does per
   product id: transaction id, polling command, polling rates, DPI maximum,
@@ -17,6 +17,16 @@
   LED controls on mice where the table does not know them.
 - `FEATURES.md` lists the supported mice with who verified them;
   `CONTRIBUTING.md` describes how to add one.
+- `freenapse version`; the version is also in `help`, the tray tooltip and the
+  gear page of the settings window.
+- A crash writes `crash.txt` next to the config file (version, message, source
+  location, Windows build). The tray and the settings window say so in a
+  message box before they stop.
+- `--log` or `--log=<file>` on any command, and on the tray, records every
+  exchange with the mouse (command, transaction id, timing, result; no input)
+  in `hid.log` next to the config file. The `FREENAPSE_HIDLOG` environment
+  variable it replaces still works.
+- Issue templates for a bug and for adding a mouse.
 
 ## 0.1.0 (2026-10-28)
 
