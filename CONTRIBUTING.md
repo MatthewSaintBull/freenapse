@@ -46,7 +46,8 @@ owner has verified. Any other Razer mouse opens read-only, so the first step
 costs nothing:
 
 1. Run `freenapse probe` with the mouse awake (keep moving it) and paste the
-   whole output, which is already a code block, into a new issue. It shows the
+   whole output, which is already a code block, into a new issue (the "New
+   mouse" template asks for exactly this). It shows the
    product id, which transaction id answered, firmware, battery,
    DPI and stages, which of the two polling commands answered, the profile and
    macro-memory answers and the sensor registers, each with its raw status and

@@ -231,7 +231,7 @@ impl HidDevice {
         let _bus = BUS.lock().unwrap_or_else(|e| e.into_inner());
         let t0 = std::time::Instant::now();
         let r = self.transact_inner(request);
-        if let Some(p) = std::env::var_os("FREENAPSE_HIDLOG") {
+        if let Some(p) = crate::diag::hid_log() {
             use std::io::Write;
             if let Ok(mut f) = std::fs::OpenOptions::new().append(true).create(true).open(p) {
                 let ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() % 100_000).unwrap_or(0);

@@ -13,6 +13,7 @@ pub mod apply;
 pub mod autostart;
 pub mod config;
 pub mod device;
+pub mod diag;
 pub mod hid;
 pub mod library;
 pub mod macros;
@@ -24,6 +25,9 @@ pub mod tray;
 pub mod ui;
 
 use std::path::PathBuf;
+
+/// The version from Cargo.toml, as printed by `freenapse version`.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// `config.toml` next to the executable when one exists there (portable use),
 /// otherwise `%APPDATA%\freenapse\config.toml`.

@@ -1,0 +1,58 @@
+name: Bug report
+description: Something crashed, a setting did not take, or the mouse did not answer.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks. Two files make most problems fixable from here: `crash.txt` after a crash, and `hid.log` after running the failing command with `--log`. Both are in the config file's folder (`%APPDATA%\freenapse`, or next to `freenapse.exe` in portable mode). Neither records what you type or click.
+  - type: input
+    id: version
+    attributes:
+      label: freenapse version
+      description: The output of `freenapse version`, or the first line of the tray icon's tooltip.
+      placeholder: freenapse 0.2.0
+    validations:
+      required: true
+  - type: dropdown
+    id: mouse
+    attributes:
+      label: Mouse and connection
+      options:
+        - Viper V3 Pro through the HyperPolling dongle
+        - Viper V3 Pro through the HyperSpeed dongle
+        - Viper V3 Pro wired
+        - Another Razer mouse (say which below)
+    validations:
+      required: true
+  - type: dropdown
+    id: synapse
+    attributes:
+      label: Razer Synapse on this PC
+      description: Synapse rewrites the settings it owns within seconds, so this matters.
+      options:
+        - Uninstalled
+        - Installed but not running
+        - Running at the same time
+        - Never installed
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what the mouse or the app did instead. The exact command or the page of the settings window helps.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: crash.txt and hid.log
+      description: Paste the crash report, and the lines of `hid.log` around the failure (`freenapse <command> --log`, or `freenapse.exe --log` for the tray). The output of `freenapse status` is useful too.
+      render: text
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      description: From Settings, System, About, or the `windows` line of crash.txt.
+      placeholder: Windows 11 24H2

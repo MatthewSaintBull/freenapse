@@ -294,7 +294,7 @@ impl App {
 
     unsafe fn update_tray(&mut self) {
         self.set_icon();
-        let mut tip = String::from("freenapse");
+        let mut tip = format!("freenapse {}", crate::VERSION);
         match (self.battery, self.mouse.as_ref()) {
             (Some(b), _) => {
                 tip.push_str(&format!("\nBattery {}%{}", b.percent, if b.charging { " (charging)" } else { "" }));

@@ -50,15 +50,30 @@ USAGE:
   freenapse raw <class> <id> <size> [args..]   send a raw command (hex bytes)
   freenapse sensor-dump                  raw sensor registers
   freenapse watch [n]                    read the battery once a second
+  freenapse version                      print the version
 
 Run freenapse.exe without arguments for the tray icon (battery, DPI stage and polling switch,
 per-game profiles, macro playback).
+
+Any command, and the tray, accept --log or --log=<file> to record every exchange with the mouse
+(default: hid.log next to the config file). A crash writes crash.txt there. Attach both to an issue.
 ";
 
 fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    let mut args: Vec<String> = std::env::args().skip(1).collect();
+    // --log[=file]: HID traffic log, in any mode.
+    if let Some(i) = args.iter().position(|a| a == "--log" || a.starts_with("--log=")) {
+        let flag = args.remove(i);
+        let path = match flag.strip_prefix("--log=") {
+            Some(p) if !p.is_empty() => std::path::PathBuf::from(p),
+            _ => freenapse::diag::default_hid_log_path(),
+        };
+        freenapse::diag::set_hid_log(path);
+    }
     let first = args.first().map(String::as_str);
-    if first.is_none() || first == Some("--tray") || first == Some("--settings") {
+    let gui = first.is_none() || first == Some("--tray") || first == Some("--settings");
+    freenapse::diag::install_panic_hook(gui);
+    if gui {
         // Tray mode: no console. A second instance opens the settings window of the running one.
         freenapse::tray::run(args.iter().any(|a| a == "--settings"));
         return ExitCode::SUCCESS;
@@ -129,7 +144,11 @@ fn run(cmd: &str, args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             return Ok(());
         }
         "help" | "-h" | "--help" => {
-            print!("{USAGE}");
+            print!("{}", USAGE.replacen("freenapse -", &format!("freenapse {} -", freenapse::VERSION), 1));
+            return Ok(());
+        }
+        "version" | "-V" | "--version" => {
+            println!("freenapse {}", freenapse::VERSION);
             return Ok(());
         }
         _ => {}

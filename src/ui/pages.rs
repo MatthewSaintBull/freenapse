@@ -1025,6 +1025,8 @@ fn app(ui: &Ui, f: &mut Form) {
     f.info("Serial", ui.serial.as_deref().unwrap_or("-"));
     f.info("Config file", &crate::config_path().to_string_lossy());
     f.info("State", if ui.pending { "changes pending (mouse asleep)" } else if ui.asleep { "mouse asleep" } else if ui.battery.is_some() { "connected" } else { "not connected" });
+    f.info("Version", &format!("freenapse {}", crate::VERSION));
+    f.info("Diagnostics", "after a crash, crash.txt in the config file's folder; freenapse --log records every exchange with the mouse in hid.log there");
 
     f.section_icon("About", Some(Icon::Help));
     f.note("freenapse replaces Razer Synapse 4 for the Viper V3 Pro with two small native programs and no services. Every setting is kept in the mouse's onboard memory.");

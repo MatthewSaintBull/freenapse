@@ -108,6 +108,23 @@ mouse at any time.
 Because the same executable is a windowed program, in cmd and PowerShell the
 prompt can come back before a command's output; the output still appears.
 
+## Reporting a problem
+
+Open an [issue](https://github.com/MatthewSaintBull/freenapse/issues/new/choose)
+with the output of `freenapse version` and, depending on the problem:
+
+* **It crashed.** Attach `crash.txt` from the config file's folder
+  (`%APPDATA%\freenapse`, or next to the executable in portable mode). The
+  tray and the settings window show a message box with that path when they
+  stop.
+* **A setting does not take, or the mouse does not answer.** Run the command
+  with `--log` (or start the tray with `freenapse.exe --log`), reproduce the
+  problem, and attach `hid.log` from the same folder. It records every exchange
+  with the mouse: command, transaction id, timing and result. It does not
+  record what you type or click.
+* **A mouse other than the Viper V3 Pro.** Paste the output of
+  `freenapse probe`; see "Supported mice" in [FEATURES.md](FEATURES.md).
+
 **Keep moving the mouse while running commands.** The wireless mouse stops
 answering the dongle when it has been idle for a while. The tray app knows this
 and retries when you come back.

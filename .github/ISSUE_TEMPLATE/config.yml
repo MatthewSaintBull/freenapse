@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Guides
+    url: https://freenapse.app/guides/
+    about: Setting DPI and polling rate without Synapse, settings not saving, uninstalling Synapse, alternatives.
+  - name: How freenapse talks to the mouse
+    url: https://github.com/MatthewSaintBull/freenapse/blob/main/FEATURES.md
+    about: Every command, what the Viper V3 Pro answers, and the supported-mice table.

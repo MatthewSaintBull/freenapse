@@ -1,0 +1,63 @@
+name: New mouse
+description: Add a Razer mouse to the device table. Costs you one command; nothing is written to the mouse.
+title: "New mouse: "
+labels: [new-mouse]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        freenapse writes only to mice an owner has verified; every other Razer mouse opens read-only. `freenapse probe` reads everything the mouse answers and prints it raw, which is what a table row is written from. Keep the mouse moving while it runs: a wireless mouse only answers while awake. Serial numbers are masked. The four steps are in [CONTRIBUTING.md](https://github.com/MatthewSaintBull/freenapse/blob/main/CONTRIBUTING.md#adding-a-mouse).
+  - type: input
+    id: model
+    attributes:
+      label: Mouse
+      description: The model as written on the box or in Synapse, and the firmware version if you know it.
+      placeholder: DeathAdder V4 Pro, firmware 1.03
+    validations:
+      required: true
+  - type: dropdown
+    id: connection
+    attributes:
+      label: Connection when you ran the probe
+      options:
+        - Wired
+        - Wireless, through its dongle
+        - Both (two probe outputs below)
+    validations:
+      required: true
+  - type: input
+    id: dongle
+    attributes:
+      label: Dongle
+      description: If wireless, which dongle, as Windows or Synapse names it.
+      placeholder: Razer HyperPolling Wireless Dongle
+  - type: input
+    id: version
+    attributes:
+      label: freenapse version
+      placeholder: freenapse 0.2.0
+    validations:
+      required: true
+  - type: textarea
+    id: probe
+    attributes:
+      label: Output of `freenapse probe`
+      description: The whole thing. If it says no transaction id answered, wake the mouse and run it again.
+      render: text
+    validations:
+      required: true
+  - type: dropdown
+    id: synapse
+    attributes:
+      label: Does Synapse still work the mouse on this PC?
+      description: Settings Synapse shows for it (DPI stages, polling rates offered, lift-off options) help confirm what the probe decoded.
+      options:
+        - Yes, installed
+        - Not installed
+  - type: checkboxes
+    id: testing
+    attributes:
+      label: Testing writes
+      description: Once a row exists, it is verified by its owner with `[device] allow_unverified = true`. Every write is read back, and Synapse puts its own profile back if anything goes wrong.
+      options:
+        - label: I can test writes on this mouse and report what it accepted and refused.
