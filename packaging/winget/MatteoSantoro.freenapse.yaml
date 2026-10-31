@@ -3,7 +3,7 @@
 # this folder are submitted together to github.com/microsoft/winget-pkgs under
 # manifests/m/MatteoSantoro/freenapse/<version>/. See packaging/README.md.
 PackageIdentifier: MatteoSantoro.freenapse
-PackageVersion: 0.2.0
+PackageVersion: 0.3.0
 DefaultLocale: en-US
 ManifestType: version
 ManifestVersion: 1.6.0
