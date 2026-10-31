@@ -11,7 +11,7 @@ body:
     attributes:
       label: freenapse version
       description: The output of `freenapse version`, or the first line of the tray icon's tooltip.
-      placeholder: freenapse 0.2.0
+      placeholder: freenapse 0.3.0
     validations:
       required: true
   - type: dropdown

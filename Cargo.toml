@@ -1,6 +1,6 @@
 [package]
 name = "freenapse"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 authors = ["Matteo Santoro <m.santoro1997@gmail.com>"]
 description = "Configure a Razer mouse from Windows without Synapse: onboard settings, tray app and a native settings window"

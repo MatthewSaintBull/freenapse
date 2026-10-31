@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 (2026-10-31)
 
 - Program and Text buttons: a button starts a program (or opens a file or URL)
   or types a text with any characters in any layout. They are one-step macros
@@ -20,6 +20,13 @@
   unsigned download gets.
 - CI runs rustfmt and clippy (`-D warnings`); `tests/golden.rs` freezes the
   exact bytes of every command builder.
+- Experimental support for the wired DeathAdder V3 Pro (product id 0x00B6),
+  contributed by kyvg after probing the mouse: its 30000 DPI limit, and the
+  Dynamic Sensitivity and rotation commands it rejects are skipped and hidden.
+  It stays behind the `allow_unverified` gate.
+- The settings window tells a sleeping mouse (kept pending, applied on wake)
+  from a mouse that rejected a write (reported, not retried). Re-importing the
+  config keeps the owner's `allow_unverified` choice.
 
 ## 0.2.0 (2026-10-30)
 
