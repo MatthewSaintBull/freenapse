@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Devices page in the settings window: every mouse of the device table,
+  grouped into verified, being tested and read-only, with product ids, DPI
+  ceiling, polling rates and the connected mouse marked.
+- The About section names the verified mice and links the website, source
+  and license; the Roadmap no longer says only the Viper V3 Pro is
+  recognised and lists Chroma lighting as partial.
+
 ## 0.4.0 (2026-11-05)
 
 - Razer Basilisk V2 (product id 0x0085), verified on the author's mouse:

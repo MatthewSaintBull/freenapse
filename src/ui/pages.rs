@@ -10,7 +10,7 @@ use super::draw::*;
 use super::{FontKind, Id, Kind, Layer, Page, TileArt, TileItem, Ui, Widget};
 use crate::accel::Mode;
 use crate::config::{MacroConfig, parse_button};
-use crate::device::{BUTTONS, TURBO_MAX, TURBO_MIN};
+use crate::device::{BUTTONS, DeviceSpec, TURBO_MAX, TURBO_MIN};
 use crate::macros::{self, Playback};
 
 /// Card padding, the label column of a settings row, and the row heights (DESIGN.md 3.3, 4.6).
@@ -469,12 +469,18 @@ fn button_icon(id: Id, label: &str) -> Option<Icon> {
 }
 
 /// Implementation state of a Synapse feature, for the Roadmap page.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Status {
     Done,
     Partial,
     Todo,
     Never,
+    /// Devices page: writes confirmed by an owner.
+    Verified,
+    /// Devices page: partly tested by an owner, writes need allow_unverified.
+    Testing,
+    /// Devices page: known from the device table only.
+    ReadOnly,
 }
 
 impl Status {
@@ -484,6 +490,9 @@ impl Status {
             Status::Partial => "Partial",
             Status::Todo => "Planned",
             Status::Never => "No",
+            Status::Verified => "Verified",
+            Status::Testing => "Testing",
+            Status::ReadOnly => "Read-only",
         }
     }
 
@@ -494,6 +503,9 @@ impl Status {
             Status::Partial => Icon::Warning,
             Status::Todo => Icon::Flag,
             Status::Never => Icon::Stop,
+            Status::Verified => Icon::Check,
+            Status::Testing => Icon::Warning,
+            Status::ReadOnly => Icon::Info,
         }
     }
 
@@ -503,6 +515,9 @@ impl Status {
             Status::Partial => WARN,
             Status::Todo => BLUE,
             Status::Never => MUTED,
+            Status::Verified => ACCENT,
+            Status::Testing => WARN,
+            Status::ReadOnly => MUTED,
         }
     }
 }
@@ -522,6 +537,7 @@ pub fn build(ui: &Ui, f: &mut Form) {
         Page::Power => power(ui, f),
         Page::Games => games(ui, f),
         Page::Customize => customize(ui, f),
+        Page::Devices => devices(ui, f),
         Page::Roadmap => roadmap(f),
         Page::App => app(ui, f),
     }
@@ -1392,8 +1408,101 @@ fn app(ui: &Ui, f: &mut Form) {
     f.info("Diagnostics", "after a crash, crash.txt in the config file's folder; freenapse --log records every exchange with the mouse in hid.log there");
 
     f.section_icon("About", Some(Icon::Help));
-    f.note("freenapse replaces Razer Synapse 4 for the Viper V3 Pro with two small native programs and no services. Every setting is kept in the mouse's onboard memory.");
+    f.note("freenapse replaces Razer Synapse 4 with two small native programs and no services. Every setting is kept in the mouse's onboard memory, so it stays the same on any computer. The Devices page lists every mouse freenapse knows and how far each one goes.");
+    let verified: Vec<&str> = device_models(Status::Verified).into_iter().map(|(m, _)| m).collect();
+    f.info("Verified mice", &verified.join(", "));
+    f.info("Website", "freenapse.app  \u{b7}  downloads, changelog and guides");
+    f.info("Source code", "github.com/MatthewSaintBull/freenapse");
+    f.info("License", "MIT, by Matteo Santoro. Not affiliated with Razer Inc.");
     f.note("Synapse 4 on this PC: 11 processes, about 1.5 GB of RAM. freenapse tray: about 10 MB. Esc closes this window; the tray icon stays.");
+}
+
+/// Rows an owner has partly tested (reads and some writes), short of verified.
+const TESTING: &[u16] = &[0x00B6];
+
+/// How far freenapse goes with one row of the device table.
+fn device_status(d: &DeviceSpec) -> Status {
+    if d.verified {
+        Status::Verified
+    } else if TESTING.contains(&d.product_id) {
+        Status::Testing
+    } else {
+        Status::ReadOnly
+    }
+}
+
+/// One line per model and status: wired and wireless rows of the same mouse
+/// share a line when they have the same status. (model, rows)
+fn device_models(st: Status) -> Vec<(&'static str, Vec<&'static DeviceSpec>)> {
+    let mut out: Vec<(&'static str, Vec<&'static DeviceSpec>)> = Vec::new();
+    for d in crate::device::DEVICES.iter().filter(|d| device_status(d) == st) {
+        let name: &'static str = match &d.name {
+            std::borrow::Cow::Borrowed(s) => s,
+            std::borrow::Cow::Owned(_) => continue,
+        };
+        let model = name.split(" (").next().unwrap_or(name).trim_start_matches("Razer ");
+        match out.iter_mut().find(|(m, _)| *m == model) {
+            Some((_, rows)) => rows.push(d),
+            None => out.push((model, vec![d])),
+        }
+    }
+    out
+}
+
+/// "0x00C0 wired, 0x00C1 wireless  ·  35000 DPI  ·  125-8000 Hz  ·  7 buttons"
+fn device_note(rows: &[&DeviceSpec]) -> String {
+    let ids: Vec<String> = rows.iter().map(|d| format!("0x{:04X} {}", d.product_id, if d.wireless { "wireless" } else { "wired" })).collect();
+    let dpi = rows.iter().map(|d| d.dpi_max).max().unwrap_or(0);
+    let hz = rows.iter().flat_map(|d| d.polling_rates.iter().copied()).max().unwrap_or(1000);
+    let mut parts = vec![ids.join(", "), format!("{dpi} DPI"), format!("125-{hz} Hz")];
+    if device_status(rows[0]) != Status::ReadOnly {
+        parts.push(format!("{} buttons", rows[0].buttons.len()));
+    }
+    if !rows[0].lighting.is_empty() {
+        parts.push("lighting".into());
+    }
+    if !rows.iter().any(|d| d.battery) {
+        parts.push("no battery".into());
+    }
+    parts.join("  \u{b7}  ")
+}
+
+/// The device table: verified, being tested, and known but read-only.
+fn devices(ui: &Ui, f: &mut Form) {
+    let here = |rows: &[&DeviceSpec]| ui.battery.is_some() && rows.iter().any(|d| d.product_id == ui.spec.product_id);
+
+    f.section_icon("Connected", Some(Icon::Mouse));
+    if ui.battery.is_some() {
+        let model = ui.spec.name.split(" (").next().unwrap_or(&ui.spec.name);
+        let state = if ui.spec.verified { "verified, every setting is written" } else { "not verified: read-only until [device] allow_unverified is set" };
+        f.info("Mouse", &format!("{model} (product id 0x{:04x})  \u{b7}  {state}", ui.spec.product_id));
+    } else {
+        f.info("Mouse", "none connected");
+    }
+
+    let groups: [(&str, Icon, Status, &str); 3] = [
+        ("Verified", Icon::Check, Status::Verified, "Tested write by write on the mouse and read back. freenapse writes to these without asking."),
+        ("Being tested", Icon::Warning, Status::Testing, "An owner has read back part of the settings. Writes need [device] allow_unverified = true in the config."),
+        ("Read-only", Icon::Info, Status::ReadOnly, "Product id, polling command and DPI ceiling are known; status and probe work, every write is refused until an owner tests the mouse."),
+    ];
+    for (title, icon, st, text) in groups {
+        let rows = device_models(st);
+        if rows.is_empty() {
+            continue;
+        }
+        f.section_icon(title, Some(icon));
+        f.note(text);
+        for (model, specs) in &rows {
+            let mut note = device_note(specs);
+            if here(specs) {
+                note.push_str("  \u{b7}  connected");
+            }
+            f.status(st, model, &note);
+        }
+    }
+
+    f.section_icon("Any other Razer mouse", Some(Icon::Help));
+    f.note("It opens read-only with the classic polling command and a 30000 DPI ceiling assumed. To add it: run freenapse probe, paste the output into a \"New mouse\" issue on GitHub, then test the writes and send its row of src/device.rs (CONTRIBUTING.md has the steps). The same list is at freenapse.app/devices.");
 }
 
 /// Feature status and release roadmap (same content as ROADMAP.md).
@@ -1448,9 +1557,10 @@ fn roadmap(f: &mut Form) {
     f.status(Done, "Game library", "Steam, Epic, GOG, EA app, Battle.net, Riot, Ubisoft, Rockstar, Xbox; any other program by file dialog");
     f.status(Done, "Dongle pairing", "pair, cancel, unpair and auto-pairing from the gear page and the CLI");
     f.status(Todo, "Bluetooth", "the Viper V3 Pro has no Bluetooth; kept for other mice");
-    f.status(Todo, "Other Razer mice", "only the Viper V3 Pro product ids are recognised");
+    f.status(Partial, "Other Razer mice", "Basilisk V2 verified, DeathAdder V3 Pro being tested, the rest read-only: see the Devices page");
     f.status(Never, "Firmware update", "use Razer's updater once if you need it");
-    f.status(Never, "Account, cloud, Chroma", "telemetry too; by design, and the Viper V3 Pro has no lighting");
+    f.status(Partial, "Chroma lighting", "off, static, breathing and spectrum per zone on mice with LEDs (Basilisk V2); no wave or per-key frames");
+    f.status(Never, "Account, cloud", "telemetry too; by design");
 
     f.section_icon("Next release: done", Some(Icon::Checklist));
     f.bullet(ACCENT, "Macros: record on the Customize tab (keys, mouse buttons, wheel, delays) and bind with the five playback options. The Viper V3 Pro has no macro memory, so the tray app plays them from an F13..F24 key, as Synapse does; verified: slot key read back from the mouse, key press played the macro.");

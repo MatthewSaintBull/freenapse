@@ -144,12 +144,13 @@ pub enum Page {
     Calibration,
     Power,
     Games,
+    Devices,
     Roadmap,
     App,
 }
 
 impl Page {
-    pub const TABS: [Page; 6] = [Page::Customize, Page::Performance, Page::Calibration, Page::Power, Page::Games, Page::Roadmap];
+    pub const TABS: [Page; 7] = [Page::Customize, Page::Performance, Page::Calibration, Page::Power, Page::Games, Page::Devices, Page::Roadmap];
 
     pub fn title(self) -> &'static str {
         match self {
@@ -158,6 +159,7 @@ impl Page {
             Page::Calibration => "CALIBRATION",
             Page::Power => "POWER",
             Page::Games => "GAMES",
+            Page::Devices => "DEVICES",
             Page::Roadmap => "ROADMAP",
             Page::App => "SETTINGS",
         }
@@ -171,6 +173,7 @@ impl Page {
             Page::Calibration => "Calibration",
             Page::Power => "Power",
             Page::Games => "Games",
+            Page::Devices => "Devices",
             Page::Roadmap => "Roadmap",
             Page::App => "Settings",
         }
@@ -184,6 +187,7 @@ impl Page {
             Page::Calibration => "Lift-off and landing on your surface",
             Page::Power => "Battery, sleep and the HyperPolling dongle",
             Page::Games => "Profiles that switch on while a game is in the foreground",
+            Page::Devices => "The Razer mice freenapse knows, and how far each one goes",
             Page::Roadmap => "What freenapse does compared with Razer Synapse 4",
             Page::App => "Tray app, onboard profile, dongle pairing and device info",
         }
@@ -196,6 +200,7 @@ impl Page {
             Page::Calibration => Icon::Track,
             Page::Power => Icon::Battery,
             Page::Games => Icon::Game,
+            Page::Devices => Icon::Checklist,
             Page::Roadmap => Icon::Flag,
             Page::App => Icon::Gear,
         }
