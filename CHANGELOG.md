@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.1 (2026-11-05)
 
 - Devices page in the settings window: every mouse of the device table,
   grouped into verified, being tested and read-only, with product ids, DPI
