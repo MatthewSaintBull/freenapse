@@ -21,7 +21,7 @@ release asset and opens the pull request:
 
 ```
 winget install Microsoft.WingetCreate
-wingetcreate update MatteoSantoro.freenapse --version 0.4.0 --urls https://github.com/MatthewSaintBull/freenapse/releases/download/v0.4.0/freenapse.exe --submit
+wingetcreate update MatteoSantoro.freenapse --version 0.4.1 --urls https://github.com/MatthewSaintBull/freenapse/releases/download/v0.4.1/freenapse.exe --submit
 ```
 
 Before that first submission, `winget validate --manifest packaging/winget`
