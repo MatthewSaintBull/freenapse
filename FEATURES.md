@@ -56,6 +56,7 @@ the unverified rows come from OpenRazer's device list.
 | Viper Mini SE, wired / wireless | 0x009E / 0x009F | 0x1f | HyperPolling | 125, 500, 1000 / 125 .. 8000 | 30000 | ❓ | wireless | nobody yet |
 | Viper 8KHz | 0x0091 | 0xff | HyperPolling | 125, 500 .. 8000 | 20000 | ❓ | — | nobody yet |
 | Cobra Pro, wired / wireless | 0x00AF / 0x00B0 | 0x1f | classic | 125, 500, 1000 | 30000 | ❓ | — | nobody yet |
+| Pro Click V2 Vertical, HyperSpeed dongle | 0x00C8 | 0x1f | classic | 125, 500, 1000 | 30000 | ❓ | — | nobody yet (probe in issue 4) |
 | Basilisk V3 Pro, wired / wireless | 0x00AA / 0x00AB | 0x1f | classic | 125, 500, 1000 | 30000 | ❓ | — | nobody yet |
 | Any other Razer mouse (vendor 0x1532, 90-byte control report) | — | 0x1f | classic | 125, 500, 1000 | 30000 | — | — | read-only; `freenapse probe` |
 

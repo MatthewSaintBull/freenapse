@@ -369,6 +369,7 @@ fn run(cmd: &str, args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         }
         "probe" => {
             let show_serials = args.iter().any(|a| a == "--serials");
+            eprintln!("probing: about half a minute, keep the mouse awake (move it now and then)");
             for line in freenapse::probe::run(&mouse, show_serials) {
                 println!("{line}");
             }

@@ -102,6 +102,7 @@ pub const DEVICES: &[DeviceSpec] = &[
     spec!(0x0091, "Razer Viper 8KHz", wireless false, tid 0xff, HyperPolling, RATES_VIPER_8K, dpi 20000, sensor false, pairing false, verified false),
     spec!(0x00AF, "Razer Cobra Pro (wired)", wireless false, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified false),
     spec!(0x00B0, "Razer Cobra Pro (wireless)", wireless true, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified false),
+    spec!(0x00C8, "Razer Pro Click V2 Vertical (wireless)", wireless true, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified false, acceleration false, rotation false),
     spec!(0x00AA, "Razer Basilisk V3 Pro (wired)", wireless false, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified false),
     spec!(0x00AB, "Razer Basilisk V3 Pro (wireless)", wireless true, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified false),
 ];

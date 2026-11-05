@@ -4,7 +4,7 @@
 //! "Adding a mouse"). Nothing here writes to the mouse. Serial numbers are
 //! masked unless asked for: they identify one unit and add nothing to a table row.
 
-use crate::device::{DeviceSpec, Mouse};
+use crate::device::{ButtonFunction, DeviceSpec, Mouse, mouse_button_name};
 use crate::hid::{HidError, Result};
 use crate::macros;
 use crate::protocol::{Report, Status, TID_DONGLE, TID_MOUSE, cmd};
@@ -15,6 +15,45 @@ pub const ARG_BYTES: usize = 16;
 
 /// Transaction ids tried for the first exchange, most common first.
 const TIDS: [u8; 3] = [0x1f, 0x3f, 0xff];
+
+/// Button codes the scan reads (profile 1, base layer): every code a Razer
+/// mouse is known or likely to use, 0x01 to 0x7f. About 20 s at 150 ms each.
+pub const BUTTON_SCAN: std::ops::RangeInclusive<u8> = 0x01..=0x7f;
+
+/// One answered button code: its raw 7-byte function and what it does now.
+/// The current function usually names the physical button (the back button
+/// answers "mouse button back" until someone remaps it).
+pub fn button_line(code: u8, r: &Report) -> String {
+    let mut f = [0u8; 7];
+    f.copy_from_slice(&r.arguments[3..10]);
+    let known = match mouse_button_name(code) {
+        "?" => String::new(),
+        name => format!("  [freenapse calls it {name}]"),
+    };
+    format!(
+        "{:<22} tid {:02x} 02/8c/0a  status={:02x} function {} = {}{known}",
+        format!("button {code:02x}"),
+        r.transaction_id,
+        r.status,
+        hex(&f, 7),
+        ButtonFunction(f).describe()
+    )
+}
+
+/// Sorted codes as hex ranges: `[1, 2, 3, 5]` is "01-03 05".
+pub fn code_ranges(codes: &[u8]) -> String {
+    let mut out: Vec<String> = Vec::new();
+    let mut i = 0;
+    while i < codes.len() {
+        let start = codes[i];
+        while i + 1 < codes.len() && codes[i + 1] == codes[i] + 1 {
+            i += 1;
+        }
+        out.push(if codes[i] == start { format!("{start:02x}") } else { format!("{start:02x}-{:02x}", codes[i]) });
+        i += 1;
+    }
+    out.join(" ")
+}
 
 /// `1f 0b 00 ...` for the first `n` bytes.
 pub fn hex(bytes: &[u8], n: usize) -> String {
@@ -77,6 +116,45 @@ impl Probe<'_> {
             }
         }
         r.ok()
+    }
+
+    /// Read the button-function of every button code in [`BUTTON_SCAN`], so a
+    /// mouse with more (or other) buttons than the Viper shows which codes exist.
+    /// Answered codes get a line each; the others are summarised by status.
+    fn buttons(&mut self) {
+        let mut failed = Vec::new();
+        let mut unsupported = Vec::new();
+        let mut timed_out = Vec::new();
+        let mut other = Vec::new();
+        let mut disabled = Vec::new();
+        for code in BUTTON_SCAN {
+            let mut req = cmd::get_button_function(1, code, false);
+            req.transaction_id = self.tid;
+            match self.mouse.raw_as_is(&req) {
+                Ok(r) if r.arguments[3..10].iter().all(|b| *b == 0) => disabled.push(code),
+                Ok(r) => self.out.push(button_line(code, &r)),
+                Err(HidError::Status(Status::Failure)) => failed.push(code),
+                Err(HidError::Status(Status::NotSupported)) => unsupported.push(code),
+                Err(HidError::Status(Status::Timeout)) => timed_out.push(code),
+                Err(e) => other.push(format!("{code:02x} ({})", explain(&e))),
+            }
+        }
+        let codes = |v: &[u8]| code_ranges(v);
+        if !disabled.is_empty() {
+            self.out.push(note(format!("answered, function disabled (all zero): {}", codes(&disabled))));
+        }
+        if !failed.is_empty() {
+            self.out.push(note(format!("no button (status 03): {}", codes(&failed))));
+        }
+        if !unsupported.is_empty() {
+            self.out.push(note(format!("no button (status 05): {}", codes(&unsupported))));
+        }
+        if !timed_out.is_empty() {
+            self.out.push(note(format!("timed out, mouse asleep? keep it moving and probe again: {}", codes(&timed_out))));
+        }
+        if !other.is_empty() {
+            self.out.push(note(format!("other errors: {}", other.join(", "))));
+        }
     }
 
     fn blank(&mut self) {
@@ -190,7 +268,8 @@ pub fn run(mouse: &Mouse, show_serials: bool) -> Vec<String> {
         Some(format!("rotation {}: {} deg", if r.arguments[1] != 0 { "on" } else { "off" }, r.arguments[2] as i8))
     });
     p.read("accel state", crate::accel::get_state(1), &|r| Some(format!("dynamic sensitivity {}", if r.arguments[1] != 0 { "on" } else { "off" })));
-    p.read("button left", cmd::get_button_function(1, 0x01, false), &|r| Some(format!("function {}", hex(&r.arguments[3..10], 7))));
+    p.blank();
+    p.buttons();
 
     p.out.push("```".to_string());
     p.out
@@ -246,6 +325,21 @@ mod tests {
         assert_eq!(ascii(b"PM2401\0\0"), "PM2401");
         assert_eq!(ascii(&[0, 0]), "(empty)");
         assert_eq!(note("x"), format!("{:<22} = x", ""));
+    }
+
+    #[test]
+    fn button_lines() {
+        let mut r = cmd::get_button_function(1, 0x04, false);
+        r.status = 0x02;
+        r.arguments[3..6].copy_from_slice(&[0x01, 0x01, 0x04]);
+        let l = button_line(0x04, &r);
+        assert!(l.starts_with(&format!("{:<22} tid 1f 02/8c/0a  status=02 function 01 01 04 00 00 00 00 = mouse button back", "button 04")), "{l}");
+        assert!(l.ends_with("[freenapse calls it back]"), "{l}");
+        let l = button_line(0x60, &r);
+        assert!(!l.contains("freenapse calls it"), "{l}");
+        assert_eq!(BUTTON_SCAN.count(), 127);
+        assert_eq!(code_ranges(&[0x06, 0x07, 0x08, 0x0b, 0x60, 0x7e, 0x7f]), "06-08 0b 60 7e-7f");
+        assert_eq!(code_ranges(&[]), "");
     }
 
     #[test]

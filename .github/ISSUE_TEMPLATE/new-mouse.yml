@@ -35,14 +35,14 @@ body:
     id: version
     attributes:
       label: freenapse version
-      placeholder: freenapse 0.3.0
+      placeholder: freenapse 0.3.1
     validations:
       required: true
   - type: textarea
     id: probe
     attributes:
       label: Output of `freenapse probe`
-      description: The whole thing. If it says no transaction id answered, wake the mouse and run it again.
+      description: The whole thing, including the button lines at the end; it takes about half a minute. If it says no transaction id answered, or the button scan timed out, wake the mouse and run it again.
       render: text
     validations:
       required: true

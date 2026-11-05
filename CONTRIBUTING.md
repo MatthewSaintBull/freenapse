@@ -50,8 +50,9 @@ costs nothing:
    mouse" template asks for exactly this). It shows the
    product id, which transaction id answered, firmware, battery,
    DPI and stages, which of the two polling commands answered, the profile and
-   macro-memory answers and the sensor registers, each with its raw status and
-   argument bytes. Serial numbers are masked (`--serials` shows them; they are
+   macro-memory answers, the sensor registers and a scan of every button code
+   (0x01 to 0x7f) with what each button does now, each with its raw status and
+   argument bytes. It takes about half a minute. Serial numbers are masked (`--serials` shows them; they are
    not needed). Say which mouse and dongle it is and whether it was wired.
 2. From that, a `DeviceSpec` row is written: product id, name, wireless flag,
    transaction id, polling command and rates, DPI maximum (OpenRazer's device
@@ -60,7 +61,9 @@ costs nothing:
    whether dongle pairing applies. New rows start with `verified false`.
 3. With the row in place, the owner sets `[device] allow_unverified = true`,
    runs `freenapse import`, `freenapse apply`, `freenapse status` and the
-   window, and reports what worked and what the mouse refused. Every write is
+   window, and reports what worked and what the mouse refused. Quit Synapse
+   completely first (tray icon, then its background services), or it writes
+   its own profile back over the test. Every write is
    read back, so a wrong row shows up as an error, not as silent damage; a
    setting that went wrong is put back with Synapse or the previous config.
 4. Once the owner confirms, the row becomes `verified true` and the mouse

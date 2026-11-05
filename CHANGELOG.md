@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.1 (2026-11-05)
+
+- `freenapse probe` scans every button code (0x01 to 0x7f) and prints what
+  each button that answers does now, so a mouse with more buttons than the
+  Viper shows its layout in one paste. On the Viper V3 Pro it finds the DPI
+  button under the mouse at 0x60. The probe now takes about half a minute and
+  says so when it starts.
+- The Razer Pro Click V2 Vertical through its HyperSpeed dongle (product id
+  0x00C8) is in the device table, from the probe its owner posted: classic
+  polling, 30000 DPI, no Dynamic Sensitivity or rotation. It is read-only
+  until its owner confirms writes with `allow_unverified`.
+- CONTRIBUTING.md asks owners to quit Synapse completely before testing
+  writes, since it puts its own profile back.
+
 ## 0.3.0 (2026-10-31)
 
 - Program and Text buttons: a button starts a program (or opens a file or URL)
