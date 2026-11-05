@@ -1482,8 +1482,18 @@ fn devices(ui: &Ui, f: &mut Form) {
 
     let groups: [(&str, Icon, Status, &str); 3] = [
         ("Verified", Icon::Check, Status::Verified, "Tested write by write on the mouse and read back. freenapse writes to these without asking."),
-        ("Being tested", Icon::Warning, Status::Testing, "An owner has read back part of the settings. Writes need [device] allow_unverified = true in the config."),
-        ("Read-only", Icon::Info, Status::ReadOnly, "Product id, polling command and DPI ceiling are known; status and probe work, every write is refused until an owner tests the mouse."),
+        (
+            "Being tested",
+            Icon::Warning,
+            Status::Testing,
+            "An owner has read back part of the settings. Writes need [device] allow_unverified = true in the config.",
+        ),
+        (
+            "Read-only",
+            Icon::Info,
+            Status::ReadOnly,
+            "Product id, polling command and DPI ceiling are known; status and probe work, every write is refused until an owner tests the mouse.",
+        ),
     ];
     for (title, icon, st, text) in groups {
         let rows = device_models(st);
