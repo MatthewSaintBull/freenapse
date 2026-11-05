@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.4.0 (2026-11-05)
+
+- Razer Basilisk V2 (product id 0x0085), verified on the author's mouse:
+  DPI stages up to 20000, polling, onboard macros and all 13 buttons. That is
+  the Viper's seven plus DPI up and down, the two wheel tilts, the
+  sensitivity clutch and the profile button, each with its factory default.
+  The Customize page lists and draws the buttons the connected mouse has.
+- Lighting for mice with LEDs: off, static, breathing (one colour or random)
+  or spectrum per zone, and one brightness, stored in the mouse. The Basilisk
+  V2 has a logo and a wheel zone. New `[lighting]` config table,
+  `freenapse lighting` command and a Lighting section on the Performance page.
+  A config without the table leaves the lights alone.
+- New button functions: `clutch:<dpi>` (sensitivity clutch) and
+  `profile-next`, `profile-prev`, `profile-cycle-up`, `profile-cycle-down`.
+- Each verified mouse can keep its own config file. The Basilisk V2 uses
+  `config-basilisk-v2.toml`, made from its own settings the first time, and
+  the Viper keeps `config.toml`. The tray switches files when another mouse
+  connects, so one mouse's settings are never written to the other.
+- Mice without a battery: status, apply, the tray and the window skip battery,
+  idle sleep and low battery, show "wired", and hide the Power page when
+  there is no dongle either.
+- Fix: the macro id list is read with `0x06/0x8b`. The old `0x06/0x81`
+  answered zeros on a mouse with macro memory, so import missed the stored
+  macros and dropped every button bound to one.
+
 ## 0.3.1 (2026-11-05)
 
 - `freenapse probe` scans every button code (0x01 to 0x7f) and prints what

@@ -57,6 +57,7 @@ the unverified rows come from OpenRazer's device list.
 | Viper 8KHz | 0x0091 | 0xff | HyperPolling | 125, 500 .. 8000 | 20000 | ❓ | — | nobody yet |
 | Cobra Pro, wired / wireless | 0x00AF / 0x00B0 | 0x1f | classic | 125, 500, 1000 | 30000 | ❓ | — | nobody yet |
 | Pro Click V2 Vertical, HyperSpeed dongle | 0x00C8 | 0x1f | classic | 125, 500, 1000 | 30000 | ❓ | — | nobody yet (probe in issue 4) |
+| Basilisk V2 (wired) | 0x0085 | 0x1f | classic `00/05` | 125, 500, 1000 | 20000 | — | — | the author |
 | Basilisk V3 Pro, wired / wireless | 0x00AA / 0x00AB | 0x1f | classic | 125, 500, 1000 | 30000 | ❓ | — | nobody yet |
 | Any other Razer mouse (vendor 0x1532, 90-byte control report) | — | 0x1f | classic | 125, 500, 1000 | 30000 | — | — | read-only; `freenapse probe` |
 
@@ -67,6 +68,18 @@ allow_unverified = true` in the config lets the owner of an unverified mouse
 write to it at their own risk.
 
 The wired probe and write/read-back report are in [issue #2](https://github.com/MatthewSaintBull/freenapse/issues/2).
+
+**Basilisk V2.** Probed and written on the author's mouse (firmware 1.3). Its
+13 buttons are in `BASILISK_V2_BUTTONS`: the Viper's seven plus DPI up `0x0b`,
+DPI down `0x0c`, wheel tilt left `0x34` and right `0x35`, the sensitivity
+clutch `0x0f` and the profile button `0x0e`. The defaults are what an
+untouched layer reports (tilts: scroll repeated every 20 ms; clutch: 788 DPI
+while held; profile: cycle up). It stores macros onboard (id list `0x06/0x8b`,
+up to 92160 bytes) but no macro names, has no battery (so no idle sleep or
+low-battery mode, and the tray shows it as wired), rejects rotation and
+Dynamic Sensitivity, and keeps its settings in `config-basilisk-v2.toml`.
+Lighting: logo LED `0x04` and wheel LED `0x01`, effects `0x0f/0x02`
+(off `00`, static `01`, breathing `02`, spectrum `03`), brightness `0x0f/0x04`.
 The 30000 DPI limit follows [Razer's Focus Pro 30K specification](https://mysupport.razer.com/app/answers/detail/a_id/6125/kw/mice).
 Angle and Dynamic Sensitivity getters failed on that unit, so those commands
 and controls are disabled. Full sensor tracking and wireless 0x00B7 remain
@@ -132,7 +145,7 @@ All sensor commands start with class id 0 and PixArt sensor id 4 (`CALIBRATION_S
 | Cloud profiles | ❌ one config file |
 | Per-game automatic profile switching | ✅ `[[games]]`: DPI stage, polling rate and a button layout per game, written by the tray app while that game owns the foreground window and reverted when it ends (software-side, like Synapse). A game is matched by its install folder (`dir`: any program started from inside it) or by its program name (`exe`) |
 | Game library | ✅ local scan, no account: Steam (`libraryfolders.vdf` + `appmanifest_*.acf`), Epic Games (`ProgramData\Epic\EpicGamesLauncher\Data\Manifests\*.item`, games only, no DLC), GOG Galaxy (`HKLM\SOFTWARE\WOW6432Node\GOG.com\Games`), EA app / Battle.net / Riot / Ubisoft Connect / Rockstar (their uninstall entries, by publisher, launchers excluded), Xbox app (`X:\XboxGames\*\Content\MicrosoftGame.config` on fixed drives); one entry per install folder, shown as cover tiles (Steam `appcache\librarycache` art, Xbox `MicrosoftGame.config` logos, otherwise the program's icon). Other programs: "Add a program..." file dialog. `src/library.rs`, `src/ui/art.rs`, `freenapse games` |
-| Chroma lighting | n/a, the mouse has no RGB |
+| Chroma lighting | ✅ on mice with LEDs (Basilisk V2: logo and wheel): off, static, breathing (one colour or random) and spectrum per zone, one brightness, stored in the mouse. `[lighting]`, `freenapse lighting`, Performance page. Wave, reactive and per-key frames are not written. The Viper V3 Pro has no RGB |
 | Firmware update | ❌ use Razer's updater once if needed |
 | Firmware version, serial number (mouse and dongle) | ✅ verified: dongle fw 1.11, serials |
 | Dongle pairing / unpairing | ✅ gear page and `freenapse pair / pair-cancel / unpair --yes / pair-status`, with Synapse's bytes: pairing mode `0x00/0x41` `[1 start / 4 cancel, pidHi, pidLo]`, unpair `0x00/0x42` `[pidHi, pidLo]`, scan `0x00/0x46` `[mode]`, auto-pairing `0x00/0x55` set / `0xd5` get, paired list `0x00/0xbf` `[count, (state, pidHi, pidLo)...]`, all addressed to the dongle |

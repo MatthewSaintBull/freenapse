@@ -19,6 +19,7 @@ pub mod device;
 pub mod diag;
 pub mod hid;
 pub mod library;
+pub mod lighting;
 pub mod macros;
 pub mod player;
 pub mod probe;
@@ -33,17 +34,39 @@ use std::path::PathBuf;
 /// The version from Cargo.toml, as printed by `freenapse version`.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// `config.toml` next to the executable when one exists there (portable use),
-/// otherwise `%APPDATA%\freenapse\config.toml`.
+/// Which config file the mouse opened last uses (see [`config_path`]).
+static MOUSE_CONFIG: std::sync::Mutex<Option<&'static str>> = std::sync::Mutex::new(None);
+
+/// Called when a mouse is opened: `None` for `config.toml`, `Some(name)` for
+/// `config-<name>.toml` (from the device table).
+pub fn set_mouse_config(name: Option<&'static str>) {
+    if let Ok(mut c) = MOUSE_CONFIG.lock() {
+        *c = name;
+    }
+}
+
+/// The file name of a mouse's config: `config.toml` for the Viper V3 Pro and
+/// every mouse whose row names no file of its own, `config-<name>.toml`
+/// otherwise, so two mice on one PC never share settings.
+pub fn config_file_name(name: Option<&str>) -> String {
+    match name {
+        Some(n) => format!("config-{n}.toml"),
+        None => "config.toml".to_string(),
+    }
+}
+
+/// The config file of the mouse opened last (`config.toml` before any is):
+/// next to the executable when a `config.toml` exists there (portable use),
+/// otherwise in `%APPDATA%\freenapse`.
 pub fn config_path() -> PathBuf {
+    let file = config_file_name(MOUSE_CONFIG.lock().ok().and_then(|c| *c));
     if let Ok(exe) = std::env::current_exe() {
-        let portable = exe.with_file_name("config.toml");
-        if portable.exists() {
-            return portable;
+        if exe.with_file_name("config.toml").exists() {
+            return exe.with_file_name(file);
         }
     }
     let base = std::env::var_os("APPDATA").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
-    base.join("freenapse").join("config.toml")
+    base.join("freenapse").join(file)
 }
 
 /// Milliseconds since the last keyboard/mouse input, as reported by Windows.

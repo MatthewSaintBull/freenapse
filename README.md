@@ -8,11 +8,13 @@
 [![CI](https://github.com/MatthewSaintBull/freenapse/actions/workflows/ci.yml/badge.svg)](https://github.com/MatthewSaintBull/freenapse/actions/workflows/ci.yml)
 
 A tiny Rust replacement for Razer Synapse, built for the **Razer Viper V3 Pro**
-(wired, or through the HyperSpeed / HyperPolling dongle). Download, changelog and
-guides: **https://freenapse.app**.
+(wired, or through the HyperSpeed / HyperPolling dongle) and the **Razer
+Basilisk V2** (all 13 buttons, onboard macros, logo and wheel lighting).
+Download, changelog and guides: **https://freenapse.app**.
 
 Experimental support for other mice, including the wired DeathAdder V3 Pro,
-is listed under [Supported mice](FEATURES.md#supported-mice).
+is listed under [Supported mice](FEATURES.md#supported-mice). Each verified
+mouse keeps its own config file, so two of them on one PC never share settings.
 
 ![The Customize page: button assignment with the mouse drawing](assets/screenshot-customize.png)
 
@@ -95,7 +97,7 @@ See [FEATURES.md](FEATURES.md) for the full Synapse feature map and the USB prot
 freenapse.exe               # double-click: tray icon (battery, DPI stage, polling rate, per-game profiles, macros)
 freenapse ui                # settings window (or click the tray icon)
 freenapse status            # see what the mouse currently has stored
-freenapse probe             # a mouse other than the Viper V3 Pro? paste this into an issue (see FEATURES.md, Supported mice)
+freenapse probe             # a mouse that is not verified yet? paste this into an issue (see FEATURES.md, Supported mice)
 freenapse config            # creates the config file from the mouse's current settings; edit it
 freenapse apply             # write the config to the mouse
 freenapse autostart on      # start the tray at login
@@ -126,7 +128,7 @@ with the output of `freenapse version` and, depending on the problem:
   problem, and attach `hid.log` from the same folder. It records every exchange
   with the mouse: command, transaction id, timing and result. It does not
   record what you type or click.
-* **A mouse other than the Viper V3 Pro.** Paste the output of
+* **A mouse that is not verified yet.** Paste the output of
   `freenapse probe`; see "Supported mice" in [FEATURES.md](FEATURES.md).
 
 **Keep moving the mouse while running commands.** The wireless mouse stops
@@ -228,7 +230,8 @@ The code is plain Win32: SetupAPI enumeration, `HidD_SetFeature` /
 
 ## Not replicated
 
-Chroma lighting (the Viper V3 Pro has none), cloud profiles, Sensitivity
+Chroma lighting beyond one effect per zone (the Basilisk V2 gets off, static,
+breathing and spectrum; the Viper V3 Pro has no LEDs), cloud profiles, Sensitivity
 Matcher, firmware updates. The onboard profile selector (config, CLI, gear page) is there, but
 the Viper V3 Pro holds a single profile and refuses others, and Synapse's
 engine for this mouse has no surface calibration, so there is none here.

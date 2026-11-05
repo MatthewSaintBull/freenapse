@@ -61,6 +61,8 @@ struct App {
     config_applied: bool,
     /// No config file yet: build one from the mouse's current settings once it answers.
     need_import: bool,
+    /// The file `config` was loaded from: another mouse has another file.
+    config_file: std::path::PathBuf,
     /// Game whose profile is currently written to the mouse (its `GameOverrides::key`), if any.
     game_mode: Option<String>,
     /// Game profile that should be on the mouse but could not be written yet (mouse asleep).
@@ -141,6 +143,7 @@ pub fn run(open_settings: bool) {
             polling: None,
             config_applied: false,
             need_import,
+            config_file: config_path(),
             game_mode: None,
             game_wanted: None,
             notified_low: false,
@@ -365,7 +368,11 @@ impl App {
         let mut tip = format!("freenapse {}", crate::VERSION);
         match (self.battery, self.mouse.as_ref()) {
             (Some(b), _) => {
-                tip.push_str(&format!("\nBattery {}%{}", b.percent, if b.charging { " (charging)" } else { "" }));
+                if b.wired {
+                    tip.push_str("\nWired, no battery");
+                } else {
+                    tip.push_str(&format!("\nBattery {}%{}", b.percent, if b.charging { " (charging)" } else { "" }));
+                }
             }
             (None, Some(_)) => tip.push_str("\nMouse asleep: move it to refresh"),
             (None, None) => tip.push_str("\nMouse not found"),
@@ -414,7 +421,12 @@ impl App {
     unsafe fn refresh(&mut self) {
         if self.mouse.is_none() {
             match Mouse::open() {
-                Ok(m) => self.mouse = Some(m),
+                Ok(m) => {
+                    self.mouse = Some(m);
+                    if config_path() != self.config_file {
+                        self.switch_config();
+                    }
+                }
                 Err(e) => {
                     self.last_error = Some(e.to_string());
                     self.battery = None;
@@ -477,7 +489,7 @@ impl App {
                 self.last_error = None;
                 let low = self.config.tray.notify_percent;
                 let b = r.battery;
-                if !b.charging && b.percent <= low && !self.notified_low {
+                if !b.wired && !b.charging && b.percent <= low && !self.notified_low {
                     self.notified_low = true;
                     let name = self.mouse.as_ref().map(|m| m.spec().name.to_string()).unwrap_or_else(|| "Mouse".into());
                     self.notify("Mouse battery low", &format!("{name} at {}%. Plug it in.", b.percent), true);
@@ -560,6 +572,28 @@ impl App {
 
     /// Remember when the config file was last written by us or loaded, so an
     /// edit by hand can be told apart from the settings window's own save.
+    /// A different mouse is open: drive it with its own config file (made from
+    /// the mouse's settings the first time), never with the previous mouse's.
+    fn switch_config(&mut self) {
+        self.config_file = config_path();
+        self.need_import = !self.config_file.exists();
+        let (config, err) = if self.need_import {
+            (Config::default(), None)
+        } else {
+            match Config::load(&self.config_file) {
+                Ok(c) => (c, None),
+                Err(e) => (Config::default(), Some(e)),
+            }
+        };
+        self.config = config;
+        self.config_error = err;
+        load_soft_macros(&self.config);
+        self.config_applied = false;
+        self.game_mode = None;
+        self.game_wanted = None;
+        self.note_config_mtime();
+    }
+
     fn note_config_mtime(&mut self) {
         self.config_mtime = std::fs::metadata(config_path()).and_then(|m| m.modified()).ok();
     }
@@ -615,6 +649,7 @@ impl App {
     unsafe fn show_menu(&mut self) {
         let menu = CreatePopupMenu();
         let status = match (self.battery, self.mouse.as_ref()) {
+            (Some(b), _) if b.wired => "Wired, no battery".to_string(),
             (Some(b), _) => format!("Battery {}%{}", b.percent, if b.charging { " (charging)" } else { "" }),
             (None, Some(_)) => "Mouse asleep - move it".to_string(),
             (None, None) => "Mouse not found".to_string(),
@@ -1034,7 +1069,7 @@ unsafe fn make_battery_icon(battery: Option<Battery>, connected: bool) -> HICON 
     let white = (235, 235, 235);
     let grey = (140, 140, 140);
     let color = match battery {
-        Some(b) if b.charging => (80, 160, 255),
+        Some(b) if b.charging || b.wired => (80, 160, 255),
         Some(b) if b.percent <= 15 => (235, 60, 60),
         Some(b) if b.percent <= 35 => (240, 180, 40),
         Some(_) => (90, 200, 90),
@@ -1059,6 +1094,9 @@ unsafe fn make_battery_icon(battery: Option<Battery>, connected: bool) -> HICON 
             let inner_w = x1 - x0 - 2 * scale;
             let fill = (inner_w * b.percent as i32 / 100).max(if b.percent > 0 { scale } else { 0 });
             c.rect(x0 + scale, y1 - 3 * scale, x0 + scale + fill, y1 - scale, color);
+            if b.wired {
+                return canvas_to_icon(&c);
+            }
             // Percentage digits, centred in the upper area.
             let digits: Vec<u8> = if b.percent >= 100 {
                 vec![1, 0, 0]

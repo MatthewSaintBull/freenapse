@@ -34,7 +34,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
 use crate::accel;
 use crate::config::{Config, GameConfig, MacroConfig, macro_spec, parse_button};
-use crate::device::{BUTTONS, Battery, ButtonFunction, DeviceSpec, MacroStorage, Mouse, PairedDevice};
+use crate::device::{Battery, DeviceSpec, MacroStorage, Mouse, PairedDevice, PhysicalButton};
 use crate::hid::HidError;
 use crate::library::{self, Game};
 use crate::macros::{self, Playback};
@@ -227,6 +227,11 @@ pub enum Id {
     GamesEdit,
     RotationOn,
     Rotation,
+    /// Effect chips of one lighting zone (index into the spec's zones).
+    LightEffect(usize),
+    /// Colour chips of one lighting zone.
+    LightColor(usize),
+    Brightness,
     TrackMode,
     Asym,
     Lift,
@@ -463,6 +468,7 @@ enum Write {
     DongleLed,
     Accel,
     Profile,
+    Lighting,
     Button(u8, bool),
     Macro(u16),
     MacroDelete(u16),
@@ -957,6 +963,8 @@ impl Ui {
     }
 
     fn load_config(&mut self) {
+        // Open the mouse first: its config file is the one to show.
+        let _ = Mouse::open();
         let path = config_path();
         if path.exists() {
             match Config::load(&path) {
@@ -1176,6 +1184,9 @@ impl Ui {
         for (i, p) in Page::TABS.iter().enumerate() {
             if *p == Page::Calibration && !self.spec.sensor_tracking {
                 continue; // the tracking page of src/sensor.rs is not known to apply to this mouse
+            }
+            if *p == Page::Power && !self.spec.battery && !self.spec.pairing {
+                continue; // wired only: no battery, sleep or dongle settings to show
             }
             self.widgets.push(Widget {
                 id: Id::Tab(i),
@@ -1443,6 +1454,7 @@ impl Ui {
         text(dc, &rect(cr.left + s(16), cr.top + s(32), cr.right - cr.left - s(32), s(16)), &sub, self.fonts.small, MUTED, DT_ROW);
         // Battery bar with the percentage at its right.
         let (bcol, pct, label) = match self.battery {
+            Some(b) if b.wired => (BLUE, 100, "wired".to_string()),
             Some(b) if b.charging => (BLUE, b.percent as i32, format!("{}% charging", b.percent)),
             Some(b) if b.percent as u32 <= self.cfg.tray.notify_percent as u32 => (WARN, b.percent as i32, format!("{}%", b.percent)),
             Some(b) => (ACCENT, b.percent as i32, format!("{}%", b.percent)),
@@ -1884,7 +1896,7 @@ impl Ui {
         let x = r.left;
         let y = r.top + (r.bottom - r.top - bh) / 2;
         let color = match self.battery {
-            Some(b) if b.charging => BLUE,
+            Some(b) if b.charging || b.wired => BLUE,
             Some(b) if b.percent <= 15 => ERR,
             Some(b) if b.percent <= 35 => WARN,
             Some(_) => ACCENT,
@@ -1907,6 +1919,7 @@ impl Ui {
         reflection(dc, &shell, 24);
         let tx = x + bw + s(28);
         let (big, small) = match self.battery {
+            Some(b) if b.wired => ("Wired".to_string(), "No battery: powered by the cable".to_string()),
             Some(b) => (format!("{}%", b.percent), if b.charging { "Charging".to_string() } else { "On battery".to_string() }),
             None if self.asleep => ("--".to_string(), "Mouse asleep: move it to refresh".to_string()),
             None => ("--".to_string(), "Mouse not connected".to_string()),
@@ -2434,13 +2447,24 @@ impl Ui {
     // Changes
     // ------------------------------------------------------------------
 
+    /// The physical buttons of the open mouse (the Viper's seven when none is open).
+    pub(crate) fn buttons(&self) -> &'static [PhysicalButton] {
+        self.spec.buttons
+    }
+
+    /// The selected physical button.
+    pub(crate) fn sel(&self) -> &'static PhysicalButton {
+        let b = self.buttons();
+        &b[self.sel_button.min(b.len() - 1)]
+    }
+
     pub(crate) fn button_sel(&self) -> (u8, bool) {
-        (BUTTONS[self.sel_button].1, self.layer == Layer::Hypershift)
+        (self.sel().code, self.layer == Layer::Hypershift)
     }
 
     /// Config key of the selected button in the selected layer.
     pub(crate) fn button_key(&self) -> String {
-        let name = BUTTONS[self.sel_button].0;
+        let name = self.sel().name;
         if self.layer == Layer::Hypershift { format!("hypershift.{name}") } else { name.to_string() }
     }
 
@@ -2817,6 +2841,38 @@ impl Ui {
                 self.cfg.polling.game_rate = rates[(v as usize).min(rates.len() - 1)];
                 Write::None
             }
+            Id::LightEffect(i) | Id::LightColor(i) => {
+                let Some((zone, _)) = self.spec.lighting.get(i) else { return };
+                let cur = self.cfg.lighting.zone(zone).and_then(|s| crate::lighting::Effect::parse(s).ok());
+                let color = cur.and_then(|e| e.color()).unwrap_or(pages::LIGHT_COLORS[3].1);
+                use crate::lighting::Effect;
+                let new = if let Id::LightEffect(_) = id {
+                    match v {
+                        0 => Effect::Off,
+                        1 => Effect::Static(color),
+                        2 => Effect::Breathing(color),
+                        _ => Effect::Spectrum,
+                    }
+                } else {
+                    let c = pages::LIGHT_COLORS.get(v as usize).map(|c| c.1);
+                    match (cur, c) {
+                        (Some(Effect::Breathing(_) | Effect::BreathingRandom), None) => Effect::BreathingRandom,
+                        (Some(Effect::Breathing(_) | Effect::BreathingRandom), Some(c)) => Effect::Breathing(c),
+                        (_, c) => Effect::Static(c.unwrap_or(color)),
+                    }
+                };
+                if let Some(slot) = self.cfg.lighting.zone_mut(zone) {
+                    *slot = Some(new.spec());
+                }
+                if self.cfg.lighting.brightness.is_none() {
+                    self.cfg.lighting.brightness = Some(100);
+                }
+                Write::Lighting
+            }
+            Id::Brightness => {
+                self.cfg.lighting.brightness = Some(v.clamp(0, 100) as u8);
+                Write::Lighting
+            }
             Id::RotationOn => {
                 self.cfg.sensor.rotation = if v == 1 { self.rotation_last } else { 0 };
                 Write::Rotation
@@ -2909,7 +2965,7 @@ impl Ui {
                 return;
             }
             Id::SelectButton(i) => {
-                self.sel_button = i.min(BUTTONS.len() - 1);
+                self.sel_button = i.min(self.buttons().len() - 1);
                 self.key_mode = None;
                 self.layout();
                 InvalidateRect(self.hwnd, ptr::null(), 0);
@@ -2933,7 +2989,11 @@ impl Ui {
                 self.text_mode = None;
                 let spec = match pages::CATEGORIES[c] {
                     "Default" => None,
-                    "Mouse" => Some(format!("mouse:{}", BUTTONS[self.sel_button].0)),
+                    "Mouse" => {
+                        // A button that clicks keeps its own click; the others start from left click.
+                        let own = self.sel().name;
+                        Some(format!("mouse:{}", if crate::device::button_code(own).is_some() { own } else { "left" }))
+                    }
                     "Keyboard" => {
                         // Show the key box; nothing is written until a key name is typed.
                         if !self.layer_buttons().get(&key).is_some_and(|s| s.starts_with("key:")) {
@@ -3101,6 +3161,9 @@ impl Ui {
                     let samples = cfg.acceleration.samples();
                     m.set_acceleration(cfg.acceleration.enabled, mode, Some(&samples))?;
                 }
+                Write::Lighting => {
+                    apply::apply_lighting(m, &cfg)?;
+                }
                 Write::Profile => {
                     m.select_profile(cfg.profile.active)?;
                     // The new profile may hold other buttons and acceleration: push the config's.
@@ -3173,6 +3236,7 @@ impl Ui {
                     Write::Polling => "Polling rate saved to the mouse",
                     Write::Tracking => "Tracking settings saved to the mouse",
                     Write::Accel => "Dynamic Sensitivity saved to the mouse",
+                    Write::Lighting => "Lighting saved to the mouse",
                     Write::Profile => "Onboard profile selected and the config written to it",
                     Write::Button(..) => "Button assignment saved to the mouse",
                     Write::Macro(_) => {
@@ -3226,12 +3290,12 @@ impl Ui {
 
     /// Write the Hypershift layer of the config (normal layer: `apply::apply_game_buttons`).
     fn write_hypershift_buttons(m: &Mouse, cfg: &Config) -> Result<(), HidError> {
-        for (name, code) in BUTTONS {
-            let key = format!("hypershift.{name}");
-            let f = cfg.buttons.get(&key).and_then(|s| parse_button(s).ok().flatten()).unwrap_or(ButtonFunction::mouse_button(code));
+        for b in m.spec().buttons {
+            let key = format!("hypershift.{}", b.name);
+            let f = cfg.buttons.get(&key).and_then(|s| parse_button(s).ok().flatten()).unwrap_or(b.default);
             let f = apply::resolve(m, cfg, f)?;
-            if m.button(m.profile(), code, true)? != f {
-                m.set_button(m.profile(), code, true, f)?;
+            if m.button(m.profile(), b.code, true)? != f {
+                m.set_button(m.profile(), b.code, true, f)?;
             }
         }
         Ok(())

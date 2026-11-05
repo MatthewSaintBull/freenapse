@@ -582,9 +582,18 @@ fn performance(ui: &Ui, f: &mut Form) {
     f.section_icon("Polling rate", Some(Icon::Bolt));
     let rates: &[u16] = ui.spec.polling_rates;
     let sel = rates.iter().position(|r| *r == cfg.polling.rate).unwrap_or(0);
-    f.ticks("Polling rate (Hz)", "Reports per second. 4000 and 8000 need the HyperPolling dongle and use more battery", &hz_labels(rates), sel, Id::Polling);
+    let sub = if rates.iter().any(|r| *r > 1000) {
+        "Reports per second. 4000 and 8000 need the HyperPolling dongle and use more battery"
+    } else {
+        "Reports per second"
+    };
+    f.ticks("Polling rate (Hz)", sub, &hz_labels(rates), sel, Id::Polling);
 
     f.note("Games can switch to their own polling rate, DPI stage and buttons while they run: see the Games page.");
+
+    if !ui.spec.lighting.is_empty() {
+        lighting(ui, f);
+    }
 
     if ui.spec.supports_rotation {
         f.section_icon("Rotation", Some(Icon::Sync));
@@ -594,6 +603,55 @@ fn performance(ui: &Ui, f: &mut Form) {
             f.slider("Angle", "", -30, 30, 1, cfg.sensor.rotation as i32, |v| format!("{v}°"), Id::Rotation);
         }
     }
+}
+
+/// Colour chips of the Lighting section: (label, rgb).
+pub const LIGHT_COLORS: [(&str, [u8; 3]); 8] = [
+    ("Red", [0xff, 0x00, 0x00]),
+    ("Orange", [0xff, 0x60, 0x00]),
+    ("Yellow", [0xff, 0xd0, 0x00]),
+    ("Green", [0x00, 0xff, 0x40]),
+    ("Cyan", [0x00, 0xd0, 0xff]),
+    ("Blue", [0x00, 0x30, 0xff]),
+    ("Purple", [0xa0, 0x00, 0xff]),
+    ("White", [0xff, 0xff, 0xff]),
+];
+
+fn lighting(ui: &Ui, f: &mut Form) {
+    use crate::lighting::Effect;
+    let cfg = &ui.cfg;
+    f.section_icon("Lighting", Some(Icon::Bolt));
+    let kinds: Vec<String> = ["Off", "Static", "Breathing", "Spectrum"].iter().map(|s| s.to_string()).collect();
+    for (i, (zone, _)) in ui.spec.lighting.iter().enumerate() {
+        let title = match *zone {
+            "logo" => "Logo",
+            "wheel" => "Scroll wheel",
+            z => z,
+        };
+        let e = cfg.lighting.zone(zone).and_then(|s| Effect::parse(s).ok());
+        let sel = e.map(|e| match e {
+            Effect::Off => 0,
+            Effect::Static(_) => 1,
+            Effect::Breathing(_) | Effect::BreathingRandom => 2,
+            Effect::Spectrum => 3,
+        });
+        let sub = if e.is_none() { "Not set: the mouse keeps the effect it has" } else { "" };
+        f.chips(title, sub, &kinds, sel, Id::LightEffect(i));
+        if let Some(e @ (Effect::Static(_) | Effect::Breathing(_) | Effect::BreathingRandom)) = e {
+            let mut colors: Vec<String> = LIGHT_COLORS.iter().map(|(l, _)| l.to_string()).collect();
+            if !matches!(e, Effect::Static(_)) {
+                colors.push("Random".into());
+            }
+            let csel = match e {
+                Effect::BreathingRandom => Some(LIGHT_COLORS.len()),
+                _ => e.color().and_then(|c| LIGHT_COLORS.iter().position(|(_, rgb)| *rgb == c)),
+            };
+            f.chips_wide("", &colors, csel, Id::LightColor(i));
+        }
+        f.gap(4);
+    }
+    f.slider("Brightness", "Every zone", 0, 100, 5, cfg.lighting.brightness.unwrap_or(100) as i32, |v| format!("{v} %"), Id::Brightness);
+    f.note("Stored in the mouse, so the lights look the same on any computer. Other colours: set \"static:#rrggbb\" in the config's [lighting] table.");
 }
 
 /// "1600 DPI  ·  2000 Hz" for a profile's tile.
@@ -865,7 +923,8 @@ pub fn category_of(spec: Option<&str>, macros_: &[MacroConfig]) -> usize {
         None | Some("default") => 0,
         Some(s) if s.starts_with("mouse:") || s.starts_with("turbo:") || s == "double-click" => CAT_MOUSE,
         Some(s) if s.starts_with("key:") || s.starts_with("turbo-key:") => CAT_KEYBOARD,
-        Some(s) if s.starts_with("dpi") => 3,
+        Some(s) if s.starts_with("dpi") || s.starts_with("clutch:") => 3,
+        Some(s) if s.starts_with("profile-") => CAT_SYSTEM,
         Some(s) if s.starts_with("media:") => 4,
         Some(s) if s.starts_with("system:") => CAT_SYSTEM,
         Some(s) if s.starts_with("macro") => CAT_MACRO,
@@ -922,12 +981,20 @@ pub fn options_for(cat: usize, stages: usize) -> Vec<(String, String)> {
             v.push(("Double click".to_string(), "double-click".to_string()));
             v
         }
-        CAT_SYSTEM => [("Sleep", "sleep"), ("Power", "power"), ("Wake", "wake")].iter().map(|(l, s)| (l.to_string(), format!("system:{s}"))).collect(),
+        CAT_SYSTEM => {
+            let mut v: Vec<(String, String)> =
+                [("Sleep", "sleep"), ("Power", "power"), ("Wake", "wake")].iter().map(|(l, s)| (l.to_string(), format!("system:{s}"))).collect();
+            v.push(("Profile cycle up".to_string(), "profile-cycle-up".to_string()));
+            v.push(("Profile cycle down".to_string(), "profile-cycle-down".to_string()));
+            v
+        }
         3 => {
             let mut v = vec![("Cycle up".to_string(), "dpi-up".to_string()), ("Cycle down".to_string(), "dpi-down".to_string())];
             for i in 1..=stages.clamp(1, 5) {
                 v.push((format!("Stage {i}"), format!("dpi-stage:{i}")));
             }
+            v.push(("Clutch 400 DPI".to_string(), "clutch:400".to_string()));
+            v.push(("Clutch 800 DPI".to_string(), "clutch:800".to_string()));
             v
         }
         4 => [
@@ -955,6 +1022,12 @@ fn pretty_button(name: &str) -> String {
         "forward" => "Forward",
         "scroll-up" => "Scroll up",
         "scroll-down" => "Scroll down",
+        "dpi-up" => "DPI up",
+        "dpi-down" => "DPI down",
+        "tilt-left" => "Wheel tilt left",
+        "tilt-right" => "Wheel tilt right",
+        "clutch" => "Sensitivity clutch",
+        "profile" => "Profile button",
         other => other,
     }
     .to_string()
@@ -978,7 +1051,13 @@ pub fn pretty_spec(spec: Option<&str>, own: &str, macros_: &[MacroConfig]) -> St
         }
     }
     match spec {
-        None | Some("default") => format!("{} (default)", pretty_button(own)),
+        None | Some("default") => match crate::device::physical_button(own) {
+            Some(b) if crate::device::button_code(own).is_none() => {
+                let spec = crate::config::spec_for(&b.default);
+                format!("{} (default)", pretty_spec(spec.as_deref(), "left", macros_))
+            }
+            _ => format!("{} (default)", pretty_button(own)),
+        },
         Some("disabled") => "Disabled".into(),
         Some("hypershift") => "Hypershift".into(),
         Some("double-click") => "Double click".into(),
@@ -988,6 +1067,11 @@ pub fn pretty_spec(spec: Option<&str>, own: &str, macros_: &[MacroConfig]) -> St
         Some("dpi-up") => "DPI cycle up".into(),
         Some("dpi-down") => "DPI cycle down".into(),
         Some(s) if s.starts_with("dpi-stage:") => format!("DPI stage {}", &s[10..]),
+        Some(s) if s.starts_with("clutch:") => format!("Sensitivity clutch {} DPI", s[7..].replace(':', " x ")),
+        Some("profile-next") => "Next profile".into(),
+        Some("profile-prev") => "Previous profile".into(),
+        Some("profile-cycle-up") => "Profile cycle up".into(),
+        Some("profile-cycle-down") => "Profile cycle down".into(),
         Some(s) if s.starts_with("mouse:") => pretty_button(&s[6..]),
         Some(s) if s.starts_with("media:") => options_for(4, 1).iter().find(|(_, v)| v == s).map(|(l, _)| l.clone()).unwrap_or_else(|| s.to_string()),
         Some("key:") => "Keyboard: type a key".into(),
@@ -1032,7 +1116,9 @@ fn customize(ui: &Ui, f: &mut Form) {
     let y0 = f.y;
     let hs = ui.layer == Layer::Hypershift;
     let layer_buttons = ui.layer_buttons();
-    for (i, (name, _)) in BUTTONS.iter().enumerate() {
+    let buttons = ui.buttons();
+    for (i, b) in buttons.iter().enumerate() {
+        let name = b.name;
         let key = if hs { format!("hypershift.{name}") } else { name.to_string() };
         let mut spec = layer_buttons.get(&key).map(String::as_str);
         let mut inherited = false;
@@ -1046,14 +1132,15 @@ fn customize(ui: &Ui, f: &mut Form) {
         if inherited {
             sub.push_str(" · from Normal");
         }
-        f.push(Id::SelectButton(i), f.x + PAD, f.y, list_w, row_h - 4, Kind::Row { title: pretty_button(name), sub, selected: ui.sel_button == i });
+        f.push(Id::SelectButton(i), f.x + PAD, f.y, list_w, row_h - 4, Kind::Row { title: pretty_button(name), sub, selected: ui.sel().name == name });
         f.y += row_h;
     }
-    let art_h = row_h * BUTTONS.len() as i32 - 4;
+    let art_h = (row_h * buttons.len() as i32 - 4).min(row_h * 7 - 4);
     let art_x = f.x + PAD + list_w + 24;
     let art_w = f.w - 2 * PAD - list_w - 24;
-    let regions = mouse_regions(f, art_x, y0, art_w, art_h);
-    f.push(Id::SelectButton(ui.sel_button), art_x, y0, art_w, art_h, Kind::MouseArt { highlight: ui.sel_button, regions });
+    let regions = mouse_regions(f, art_x, y0, art_w, art_h, buttons);
+    let sel = buttons.iter().position(|b| b.name == ui.sel().name).unwrap_or(0);
+    f.push(Id::SelectButton(sel), art_x, y0, art_w, art_h, Kind::MouseArt { highlight: sel, regions });
     if hs && !cfg.buttons.values().any(|v| v == "hypershift") {
         f.gap(6);
         f.note("No button is assigned to Hypershift yet, so this layer cannot be reached. Assign Hypershift to a button in the normal layer first.");
@@ -1064,7 +1151,7 @@ fn customize(ui: &Ui, f: &mut Form) {
         f.note(&format!("Layout used while {exe} is in the foreground: the tray app writes it to the mouse when the game starts and restores the Normal layout when it ends. Buttons set to Default keep their Normal assignment."));
     }
 
-    let name = BUTTONS[ui.sel_button].0;
+    let name = ui.sel().name;
     let key = ui.button_key();
     let spec = layer_buttons.get(&key).map(String::as_str);
     let cat = if ui.key_mode.as_deref() == Some(key.as_str()) {
@@ -1402,7 +1489,7 @@ fn geom(x: i32, y: i32, w: i32, h: i32) -> MouseGeom {
 }
 
 /// Clickable regions (button index → scaled rect), computed with the same geometry as the drawing.
-fn mouse_regions(f: &Form, x: i32, y: i32, w: i32, h: i32) -> Vec<(usize, RECT)> {
+fn mouse_regions(f: &Form, x: i32, y: i32, w: i32, h: i32, buttons: &[crate::device::PhysicalButton]) -> Vec<(usize, RECT)> {
     let g = geom(x, y, w, h);
     let s = |v: i32| f.s(v);
     let l = g.cx - g.w / 2;
@@ -1411,7 +1498,11 @@ fn mouse_regions(f: &Form, x: i32, y: i32, w: i32, h: i32) -> Vec<(usize, RECT)>
     let wheel_h = g.h / 7;
     let wheel_y = g.top + g.h * 12 / 100;
     let r = |x: i32, y: i32, w: i32, h: i32| RECT { left: s(x), top: s(y), right: s(x + w), bottom: s(y + h) };
-    vec![
+    let mut v: Vec<(usize, RECT)> = extra_shapes(&g)
+        .into_iter()
+        .filter_map(|(name, (ex, ey, ew, eh))| buttons.iter().position(|b| b.name == name).map(|i| (i, r(ex, ey, ew, eh))))
+        .collect();
+    v.extend([
         (0, r(l, g.top, g.w / 2, split - g.top)),
         (1, r(g.cx, g.top, g.w / 2, split - g.top)),
         (2, r(g.cx - wheel_w / 2, wheel_y, wheel_w, wheel_h)),
@@ -1419,6 +1510,29 @@ fn mouse_regions(f: &Form, x: i32, y: i32, w: i32, h: i32) -> Vec<(usize, RECT)>
         (6, r(g.cx - wheel_w / 2 - 4, wheel_y + wheel_h, wheel_w + 8, 18)),
         (3, r(l - 14, g.top + g.h * 48 / 100, 20, g.h * 12 / 100)),
         (4, r(l - 14, g.top + g.h * 34 / 100, 20, g.h * 12 / 100)),
+    ]);
+    v
+}
+
+/// Where the buttons beyond the Viper's seven sit on the drawing, in unscaled
+/// coordinates: DPI up and down behind the wheel, the tilts on either side
+/// of it, the clutch on the side below the side buttons.
+/// (x, y, w, h)
+type Area = (i32, i32, i32, i32);
+
+fn extra_shapes(g: &MouseGeom) -> Vec<(&'static str, Area)> {
+    let l = g.cx - g.w / 2;
+    let wheel_w = g.w / 6;
+    let wheel_h = g.h / 7;
+    let wheel_y = g.top + g.h * 12 / 100;
+    let dpi_w = wheel_w - 6;
+    let dpi_h = g.h * 4 / 100;
+    vec![
+        ("tilt-left", (g.cx - wheel_w / 2 - 14, wheel_y + wheel_h / 4, 10, wheel_h / 2)),
+        ("tilt-right", (g.cx + wheel_w / 2 + 4, wheel_y + wheel_h / 4, 10, wheel_h / 2)),
+        ("dpi-up", (g.cx - dpi_w / 2, g.top + g.h * 32 / 100, dpi_w, dpi_h)),
+        ("dpi-down", (g.cx - dpi_w / 2, g.top + g.h * 37 / 100, dpi_w, dpi_h)),
+        ("clutch", (l - 12, g.top + g.h * 62 / 100, 16, g.h * 8 / 100)),
     ]
 }
 
@@ -1485,6 +1599,15 @@ pub unsafe fn draw_mouse(ui: &Ui, dc: HDC, r: &RECT, highlight: usize, regions: 
         let (st, sbt) = hl(i);
         clip_round(dc, &sb, s(4), || vgradient(dc, &sb, st, sbt));
         round(dc, &sb, s(4), None, Some((BG, s(2))));
+    }
+
+    // Buttons only some mice have, drawn where the open mouse has them.
+    for (name, (ex, ey, ew, eh)) in extra_shapes(&g) {
+        let Some(i) = ui.buttons().iter().position(|b| b.name == name) else { continue };
+        let rr = RECT { left: dx(ex), top: dy(ey), right: dx(ex + ew), bottom: dy(ey + eh) };
+        let (t, b) = hl(i);
+        clip_round(dc, &rr, s(3), || vgradient(dc, &rr, t, b));
+        round(dc, &rr, s(3), None, Some((BG, s(1))));
     }
 
     // Callout labels with leader lines.

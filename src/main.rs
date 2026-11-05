@@ -8,7 +8,7 @@
 use std::process::ExitCode;
 
 use freenapse::config::{Config, describe};
-use freenapse::device::{self, Mouse};
+use freenapse::device::Mouse;
 use freenapse::protocol::{Report, TID_MOUSE};
 use freenapse::sensor::Tracking;
 use freenapse::{apply, config_path};
@@ -32,6 +32,9 @@ USAGE:
   freenapse lift smart <mm>              smart tracking, 1..3 mm
   freenapse lift asym <liftoff> <landing>    asymmetric cut-off: lift-off 2..26, landing 1..25 (Synapse default 13 12)
   freenapse rotation <degrees>           sensor rotation -30..30, 0 = off
+  freenapse lighting [<zone> <effect>]   show or set a zone's lighting: off, spectrum, static:#rrggbb,
+                                         breathing:#rrggbb, breathing:random (zones: logo, wheel)
+  freenapse lighting brightness <0..100> brightness of every zone
   freenapse dynamic off|classic|natural|jump|custom   Dynamic Sensitivity (custom uses the config's curve)
   freenapse dongle-led <1|2|3>           HyperPolling dongle LED: battery | polling rate | off
   freenapse buttons [profile]            show the onboard button mapping (default profile 1)
@@ -100,9 +103,10 @@ fn main() -> ExitCode {
 fn run(cmd: &str, args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     match cmd {
         "config" => {
+            let opened = Mouse::open(); // picks the mouse's own config file
             let p = config_path();
             if !p.exists() {
-                match Mouse::open().and_then(|m| apply::import(&m)) {
+                match opened.and_then(|m| apply::import(&m)) {
                     Ok(cfg) => {
                         Config::write_new(&p, &cfg)?;
                         println!("created from the mouse's current settings");
@@ -220,6 +224,27 @@ fn run(cmd: &str, args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             mouse.apply_tracking(&plan)?;
             println!("sensor: {}", mouse.sensor()?.describe());
         }
+        "lighting" => {
+            let zones = mouse.spec().lighting;
+            if zones.is_empty() {
+                return Err("this mouse has no lighting".into());
+            }
+            match (args.first(), args.get(1)) {
+                (Some(z), Some(v)) if z == "brightness" => {
+                    let b: u8 = v.parse().map_err(|_| format!("bad brightness '{v}'"))?;
+                    for (zone, _) in zones {
+                        mouse.set_brightness(zone, b.min(100))?;
+                    }
+                }
+                (Some(z), Some(v)) => mouse.set_lighting(z, freenapse::lighting::Effect::parse(v)?)?,
+                (None, _) => {}
+                _ => return Err("lighting [<zone> <effect> | brightness <0..100>]".into()),
+            }
+            for (zone, _) in zones {
+                let e = mouse.lighting(zone)?.map(|e| e.spec()).unwrap_or_else(|| "(other)".into());
+                println!("{zone:<6} {e}, brightness {}%", mouse.brightness(zone)?);
+            }
+        }
         "rotation" => {
             let deg: i8 = arg(args, 0, "degrees")?;
             if !(-30..=30).contains(&deg) {
@@ -335,10 +360,11 @@ fn run(cmd: &str, args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         }
         "buttons" => {
             let profile: u8 = args.first().map(|s| s.parse()).transpose()?.unwrap_or(1);
-            for (name, code) in device::BUTTONS {
+            for b in mouse.spec().buttons {
+                let name = b.name;
                 for hs in [false, true] {
                     let layer = if hs { "hypershift" } else { "" };
-                    match mouse.button(profile, code, hs) {
+                    match mouse.button(profile, b.code, hs) {
                         Ok(f) => println!("{name:<12}{layer:<12}{}", describe(&f)),
                         Err(e) => println!("{name:<12}{layer:<12}error: {e}"),
                     }
@@ -421,13 +447,19 @@ fn status(mouse: &Mouse) -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     let b = mouse.battery()?;
-    println!("battery:      {}%{}", b.percent, if b.charging { " (charging)" } else { "" });
+    if b.wired {
+        println!("battery:      none (wired)");
+    } else {
+        println!("battery:      {}%{}", b.percent, if b.charging { " (charging)" } else { "" });
+    }
     println!("dpi:          {:?}", mouse.dpi()?);
     let st = mouse.dpi_stages()?;
     println!("dpi stages:   active {} of {:?}", st.active, st.stages.iter().map(|s| s.0).collect::<Vec<_>>());
     println!("polling:      {}", mouse.polling_rate().map(|p| format!("{p} Hz")).unwrap_or_else(|e| e.to_string()));
-    println!("idle sleep:   {}", mouse.idle_time().map(|p| format!("{p} s")).unwrap_or_else(|e| e.to_string()));
-    println!("low battery:  {}", mouse.low_battery_threshold().map(|p| format!("{p}%")).unwrap_or_else(|e| e.to_string()));
+    if spec.battery {
+        println!("idle sleep:   {}", mouse.idle_time().map(|p| format!("{p} s")).unwrap_or_else(|e| e.to_string()));
+        println!("low battery:  {}", mouse.low_battery_threshold().map(|p| format!("{p}%")).unwrap_or_else(|e| e.to_string()));
+    }
     match mouse.sensor() {
         Ok(s) => println!("sensor:       {}", s.describe()),
         Err(e) => println!("sensor:       {e}"),
@@ -441,6 +473,15 @@ fn status(mouse: &Mouse) -> Result<(), Box<dyn std::error::Error>> {
         Ok((true, m)) => println!("dynamic sens: {}", m.name()),
         Ok((false, _)) => println!("dynamic sens: off"),
         Err(e) => println!("dynamic sens: {e}"),
+    }
+    for (zone, _) in spec.lighting {
+        let effect = match mouse.lighting(zone) {
+            Ok(Some(e)) => e.spec(),
+            Ok(None) => "an effect freenapse does not write".into(),
+            Err(e) => e.to_string(),
+        };
+        let b = mouse.brightness(zone).map(|b| format!(", brightness {b}%")).unwrap_or_default();
+        println!("lighting:     {zone} {effect}{b}");
     }
     if let Ok((n, max)) = mouse.profiles() {
         println!("profiles:     {n} onboard (the mouse supports {max}), using profile {}", mouse.profile());

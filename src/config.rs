@@ -10,12 +10,13 @@ use crate::device::{ButtonFunction, mouse_button_name};
 use crate::macros::Playback;
 use crate::sensor::Tracking;
 
-pub const DEFAULT_TOML: &str = r#"# freenapse configuration for the Razer Viper V3 Pro.
+pub const DEFAULT_TOML: &str = r#"# freenapse configuration for one Razer mouse (each mouse in the device table that has its
+# own file, like the Basilisk V2, keeps it as config-<model>.toml next to this one).
 # Everything here is written to the mouse's onboard memory, so it also
 # applies on other computers without any software running.
 
 [device]
-# freenapse writes only to mice an owner has verified (today: the Viper V3 Pro). Any other
+# freenapse writes only to mice an owner has verified (the Viper V3 Pro and the Basilisk V2). Any other
 # Razer mouse opens read-only: `freenapse status` and `freenapse probe` work, writes are refused.
 # Set this to true to write to such a mouse anyway, at your own risk, after checking the probe
 # output; please open an issue with that output so the mouse can be added to the device table.
@@ -72,7 +73,7 @@ led = 1
 
 [profile]
 # Onboard profile that the button and Dynamic Sensitivity settings go to: 1..5 on mice that
-# hold several. The Viper V3 Pro reports a single profile, so it only accepts 1.
+# hold several. The Viper V3 Pro holds a single profile, so it only accepts 1.
 active = 1
 
 [buttons]
@@ -81,7 +82,10 @@ active = 1
 #         "double-click", "turbo:left:10" (mouse button repeated N times a second while held),
 #         "dpi-up", "dpi-down", "dpi-stage:N", "hypershift", "key:ctrl+shift+c", "key:f5",
 #         "turbo-key:space:8" (key repeated N times a second while held),
-#         "media:play-pause|mute|vol-up|vol-down|next|prev", "system:sleep|power|wake"
+#         "media:play-pause|mute|vol-up|vol-down|next|prev", "system:sleep|power|wake",
+#         "clutch:400" (that DPI while held), "profile-next|profile-prev|profile-cycle-up|profile-cycle-down"
+# Buttons beyond the seven above exist on some mice; the Basilisk V2 adds dpi-up, dpi-down,
+# tilt-left, tilt-right, clutch and profile (e.g. "tilt-left" = "media:prev").
 # Prefix with "hypershift." to bind the Hypershift layer, e.g. "hypershift.back" = "dpi-stage:5".
 # back = "default"
 # forward = "default"
@@ -94,6 +98,13 @@ notify_percent = 15
 # Once a day, ask GitHub whether a newer release exists and say so in the tray menu. This is the
 # only network request freenapse makes (one GET to api.github.com, nothing about you in it).
 check_updates = true
+
+# Lighting, for mice with LEDs (the Basilisk V2: logo and wheel). Zones left out keep their effect.
+# Effects: "off", "spectrum", "static:#rrggbb", "breathing:#rrggbb", "breathing:random".
+# [lighting]
+# brightness = 70
+# logo = "static:#00ff00"
+# wheel = "spectrum"
 
 # Per-game profiles (optional, one [[games]] block per program). While the program owns the
 # foreground window the tray app applies these and restores the settings above when you leave it.
@@ -135,8 +146,42 @@ pub struct Config {
     pub profile: ProfileConfig,
     pub buttons: BTreeMap<String, String>,
     pub tray: TrayConfig,
+    pub lighting: LightingConfig,
     pub games: Vec<GameConfig>,
     pub macros: Vec<MacroConfig>,
+}
+
+/// `[lighting]`: one effect per LED zone and one brightness for all of them.
+/// Anything left out is not touched, so a config without the table leaves the
+/// lights as they are.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(default)]
+pub struct LightingConfig {
+    pub brightness: Option<u8>,
+    pub logo: Option<String>,
+    pub wheel: Option<String>,
+}
+
+impl LightingConfig {
+    pub fn zone(&self, name: &str) -> Option<&String> {
+        match name {
+            "logo" => self.logo.as_ref(),
+            "wheel" => self.wheel.as_ref(),
+            _ => None,
+        }
+    }
+
+    pub fn zone_mut(&mut self, name: &str) -> Option<&mut Option<String>> {
+        match name {
+            "logo" => Some(&mut self.logo),
+            "wheel" => Some(&mut self.wheel),
+            _ => None,
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self == &LightingConfig::default()
+    }
 }
 
 /// Settings applied while one program is in the foreground.
@@ -409,6 +454,16 @@ impl Config {
         let any_rate = crate::device::RATES_HYPERPOLLING;
         if !any_rate.contains(&self.polling.game_rate) {
             return Err(format!("polling rate {} is not one of 125/250/500/1000/2000/4000/8000", self.polling.game_rate));
+        }
+        if let Some(b) = self.lighting.brightness
+            && b > 100
+        {
+            return Err("lighting.brightness must be 0..100".into());
+        }
+        for (zone, v) in [("logo", &self.lighting.logo), ("wheel", &self.lighting.wheel)] {
+            if let Some(v) = v {
+                crate::lighting::Effect::parse(v).map_err(|e| format!("lighting.{zone}: {e}"))?;
+            }
         }
         if !(60..=900).contains(&self.power.idle_seconds) {
             return Err("power.idle_seconds must be 60..900".into());
@@ -716,6 +771,17 @@ impl Config {
                 }
             }
         }
+        if !self.lighting.is_empty() {
+            out.push_str("\n[lighting]\n");
+            if let Some(b) = self.lighting.brightness {
+                out.push_str(&format!("brightness = {b}\n"));
+            }
+            for (zone, v) in [("logo", &self.lighting.logo), ("wheel", &self.lighting.wheel)] {
+                if let Some(v) = v {
+                    out.push_str(&format!("{zone} = {v:?}\n"));
+                }
+            }
+        }
         for m in &self.macros {
             let events: Vec<String> = m.events.iter().map(|e| format!("{e:?}")).collect();
             out.push_str(&format!("\n[[macros]]\nid = {}\nname = {:?}\nevents = [{}]\n", m.id, m.name, events.join(", ")));
@@ -738,13 +804,16 @@ pub fn curve_toml(points: &[(u8, f32)]) -> String {
     format!("[{}]", items.join(", "))
 }
 
+/// Profile-switching assignments and their op byte.
+pub const PROFILE_OPS: [(&str, u8); 4] = [("profile-next", 0x01), ("profile-prev", 0x02), ("profile-cycle-up", 0x04), ("profile-cycle-down", 0x05)];
+
 /// "back" -> (button code, hypershift=false); "hypershift.back" -> (code, true).
 pub fn button_target(key: &str) -> Result<(u8, bool), String> {
     let (name, hs) = match key.strip_prefix("hypershift.") {
         Some(n) => (n, true),
         None => (key, false),
     };
-    crate::device::button_code(name).map(|c| (c, hs)).ok_or_else(|| format!("unknown button '{name}'"))
+    crate::device::physical_button(name).map(|b| (b.code, hs)).ok_or_else(|| format!("unknown button '{name}'"))
 }
 
 /// Parse a button assignment. `None` means "default" (leave it alone).
@@ -764,6 +833,25 @@ pub fn parse_button(spec: &str) -> Result<Option<ButtonFunction>, String> {
     }
     if spec == "hypershift" {
         return Ok(Some(ButtonFunction::hypershift()));
+    }
+    for (name, op) in PROFILE_OPS {
+        if spec == name {
+            return Ok(Some(ButtonFunction::profile_op(op)));
+        }
+    }
+    if let Some(rest) = spec.strip_prefix("clutch:") {
+        let dpi = |s: &str| -> Result<u16, String> {
+            let v: u16 = s.trim().parse().map_err(|_| format!("bad clutch DPI '{s}'"))?;
+            if !(crate::device::DPI_MIN..=35000).contains(&v) {
+                return Err(format!("clutch DPI must be {}..35000", crate::device::DPI_MIN));
+            }
+            Ok(v)
+        };
+        let (x, y) = match rest.split_once(':') {
+            Some((x, y)) => (dpi(x)?, dpi(y)?),
+            None => (dpi(rest)?, dpi(rest)?),
+        };
+        return Ok(Some(ButtonFunction::clutch(x, y)));
     }
     if spec == "double-click" {
         return Ok(Some(ButtonFunction::double_click()));
@@ -993,8 +1081,13 @@ pub fn spec_for(f: &ButtonFunction) -> Option<String> {
             (0x01, _) => "dpi-up".to_string(),
             (0x02, _) => "dpi-down".to_string(),
             (0x03, n) if (1..=5).contains(&n) => format!("dpi-stage:{n}"),
+            (0x05, _) => {
+                let (x, y) = f.clutch_dpi()?;
+                if x == y { format!("clutch:{x}") } else { format!("clutch:{x}:{y}") }
+            }
             _ => return None,
         },
+        0x07 => PROFILE_OPS.iter().find(|(_, op)| *op == d[2])?.0.to_string(),
         0x0c => "hypershift".to_string(),
         0x03..=0x05 | 0x0f => {
             let (id, play) = f.macro_binding()?;
@@ -1051,6 +1144,27 @@ pub fn describe(f: &ButtonFunction) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn clutch_and_profile_assignments_round_trip() {
+        for s in ["clutch:400", "clutch:800:1200", "profile-next", "profile-prev", "profile-cycle-up", "profile-cycle-down"] {
+            let f = parse_button(s).unwrap().unwrap();
+            assert_eq!(spec_for(&f).as_deref(), Some(s), "{s}");
+        }
+        assert_eq!(parse_button("clutch:788").unwrap().unwrap().0, [0x06, 5, 0x05, 0x03, 0x14, 0x03, 0x14]);
+        assert_eq!(parse_button("profile-cycle-up").unwrap().unwrap().0, [0x07, 1, 0x04, 0, 0, 0, 0]);
+        assert!(parse_button("clutch:50").is_err());
+        assert!(parse_button("clutch:x").is_err());
+        // The Basilisk V2's extra buttons are valid keys; unknown names are not.
+        assert_eq!(button_target("tilt-left"), Ok((0x34, false)));
+        assert_eq!(button_target("hypershift.clutch"), Ok((0x0f, true)));
+        assert!(button_target("thumb-wheel").is_err());
+        // Every factory default can be written back from the config.
+        for b in crate::device::BASILISK_V2_BUTTONS {
+            let s = spec_for(&b.default).unwrap_or_else(|| panic!("{} default has no spec", b.name));
+            assert_eq!(parse_button(&s).unwrap(), Some(b.default), "{}", b.name);
+        }
+    }
 
     #[test]
     fn default_config_is_valid() {

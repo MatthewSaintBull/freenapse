@@ -9,6 +9,7 @@ use std::time::Duration;
 
 use crate::accel;
 use crate::hid::{HidDevice, HidError, Result};
+use crate::lighting;
 use crate::macros::{self, Playback};
 use crate::protocol::{HID_BUF_LEN, Report, TID_DONGLE, TID_MOUSE, cmd};
 use crate::sensor::{self, SensorPlan};
@@ -52,11 +53,19 @@ pub struct DeviceSpec {
     pub supports_acceleration: bool,
     /// Sensor angle commands are available on this row.
     pub supports_rotation: bool,
+    /// The mouse has a battery (and with it idle sleep and the low-battery mode).
+    pub battery: bool,
+    /// LED zones: (config name, LED id of the lighting commands). Empty: no lights.
+    pub lighting: &'static [(&'static str, u8)],
+    /// Its own config file, `config-<name>.toml`; None shares `config.toml`.
+    pub config: Option<&'static str>,
     /// Dongle pairing (and the dongle indicator LED) as Synapse offers them for the HyperPolling dongle.
     pub pairing: bool,
     /// An owner confirmed writes on this mouse. Until then every write is refused
     /// unless the config has `[device] allow_unverified = true`.
     pub verified: bool,
+    /// The physical buttons, with the function each one has out of the box.
+    pub buttons: &'static [PhysicalButton],
 }
 
 macro_rules! spec {
@@ -64,6 +73,9 @@ macro_rules! spec {
         spec!($pid, $name, wireless $w, tid $tid, $style, $rates, dpi $dpi, sensor $s, pairing $p, verified $v, acceleration true, rotation true)
     };
     ($pid:expr, $name:expr, wireless $w:expr, tid $tid:expr, $style:ident, $rates:expr, dpi $dpi:expr, sensor $s:expr, pairing $p:expr, verified $v:expr, acceleration $a:expr, rotation $r:expr) => {
+        spec!($pid, $name, wireless $w, tid $tid, $style, $rates, dpi $dpi, sensor $s, pairing $p, verified $v, acceleration $a, rotation $r, buttons VIPER_BUTTONS)
+    };
+    ($pid:expr, $name:expr, wireless $w:expr, tid $tid:expr, $style:ident, $rates:expr, dpi $dpi:expr, sensor $s:expr, pairing $p:expr, verified $v:expr, acceleration $a:expr, rotation $r:expr, buttons $b:expr) => {
         DeviceSpec {
             product_id: $pid,
             name: Cow::Borrowed($name),
@@ -75,8 +87,12 @@ macro_rules! spec {
             sensor_tracking: $s,
             supports_acceleration: $a,
             supports_rotation: $r,
+            battery: true,
+            lighting: &[],
+            config: None,
             pairing: $p,
             verified: $v,
+            buttons: $b,
         }
     };
 }
@@ -103,6 +119,13 @@ pub const DEVICES: &[DeviceSpec] = &[
     spec!(0x00AF, "Razer Cobra Pro (wired)", wireless false, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified false),
     spec!(0x00B0, "Razer Cobra Pro (wireless)", wireless true, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified false),
     spec!(0x00C8, "Razer Pro Click V2 Vertical (wireless)", wireless true, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified false, acceleration false, rotation false),
+    // Wired only: no battery, so no idle sleep or low-battery mode either.
+    DeviceSpec {
+        battery: false,
+        lighting: &[("logo", 0x04), ("wheel", 0x01)],
+        config: Some("basilisk-v2"),
+        ..spec!(0x0085, "Razer Basilisk V2", wireless false, tid 0x1f, Classic, RATES_CLASSIC, dpi 20000, sensor false, pairing false, verified true, acceleration false, rotation false, buttons BASILISK_V2_BUTTONS)
+    },
     spec!(0x00AA, "Razer Basilisk V3 Pro (wired)", wireless false, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified false),
     spec!(0x00AB, "Razer Basilisk V3 Pro (wireless)", wireless true, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified false),
 ];
@@ -132,8 +155,12 @@ impl DeviceSpec {
             sensor_tracking: false,
             supports_acceleration: true,
             supports_rotation: true,
+            battery: true,
+            lighting: &[],
+            config: None,
             pairing: false,
             verified: false,
+            buttons: VIPER_BUTTONS,
         }
     }
 
@@ -196,6 +223,8 @@ pub fn guard_write(spec: &DeviceSpec, allow_unverified: bool, req: &Report) -> R
 pub struct Battery {
     pub percent: u8,
     pub charging: bool,
+    /// A mouse without a battery, powered by its cable (percent reads 100).
+    pub wired: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -273,6 +302,20 @@ impl ButtonFunction {
         ButtonFunction([0x06, 2, 0x03, level, 0, 0, 0])
     }
     /// 0x01 next, 0x02 previous, 0x03 + id, 0x04 cycle up, 0x05 cycle down.
+    /// Sensitivity clutch: this DPI while the button is held.
+    pub fn clutch(x: u16, y: u16) -> Self {
+        let (a, b) = (x.to_be_bytes(), y.to_be_bytes());
+        ButtonFunction([0x06, 5, 0x05, a[0], a[1], b[0], b[1]])
+    }
+    /// The clutch DPI (x, y), when this is a clutch.
+    pub fn clutch_dpi(&self) -> Option<(u16, u16)> {
+        let d = &self.0;
+        (d[0] == 0x06 && d[2] == 0x05).then(|| (u16::from_be_bytes([d[3], d[4]]), u16::from_be_bytes([d[5], d[6]])))
+    }
+    /// Profile switching: 0x01 next, 0x02 previous, 0x04 cycle up, 0x05 cycle down.
+    pub fn profile_op(op: u8) -> Self {
+        ButtonFunction([0x07, 1, op, 0, 0, 0, 0])
+    }
     pub fn profile_next() -> Self {
         ButtonFunction([0x07, 1, 0x01, 0, 0, 0, 0])
     }
@@ -356,6 +399,7 @@ impl ButtonFunction {
                 0x01 => "DPI cycle up".into(),
                 0x02 => "DPI cycle down".into(),
                 0x03 => format!("DPI stage {}", d[3]),
+                0x05 => format!("sensitivity clutch {}x{} DPI", u16::from_be_bytes([d[3], d[4]]), u16::from_be_bytes([d[5], d[6]])),
                 x => format!("DPI op 0x{x:02x}"),
             },
             0x07 => match d[2] {
@@ -408,6 +452,58 @@ pub fn button_code(name: &str) -> Option<u8> {
     BUTTONS.iter().find(|(n, _)| *n == name).map(|(_, c)| *c)
 }
 
+/// One physical button of a mouse: its config name, the code the
+/// button-mapping command addresses, and its function out of the box.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PhysicalButton {
+    pub name: &'static str,
+    pub code: u8,
+    pub default: ButtonFunction,
+}
+
+const fn clicks(name: &'static str, code: u8) -> PhysicalButton {
+    PhysicalButton { name, code, default: ButtonFunction([0x01, 1, code, 0, 0, 0, 0]) }
+}
+
+/// The seven buttons of the Viper V3 Pro, and of every row that lists no others.
+pub const VIPER_BUTTONS: &[PhysicalButton] = &[
+    clicks("left", 0x01),
+    clicks("right", 0x02),
+    clicks("middle", 0x03),
+    clicks("back", 0x04),
+    clicks("forward", 0x05),
+    clicks("scroll-up", 0x09),
+    clicks("scroll-down", 0x0a),
+];
+
+/// The Basilisk V2: the seven above plus DPI up and down behind the wheel,
+/// the wheel tilts, the sensitivity clutch and the profile button underneath.
+/// Defaults are what the mouse reports on a layer nobody has changed.
+pub const BASILISK_V2_BUTTONS: &[PhysicalButton] = &[
+    clicks("left", 0x01),
+    clicks("right", 0x02),
+    clicks("middle", 0x03),
+    clicks("back", 0x04),
+    clicks("forward", 0x05),
+    clicks("scroll-up", 0x09),
+    clicks("scroll-down", 0x0a),
+    PhysicalButton { name: "dpi-up", code: 0x0b, default: ButtonFunction([0x06, 1, 0x01, 0, 0, 0, 0]) },
+    PhysicalButton { name: "dpi-down", code: 0x0c, default: ButtonFunction([0x06, 1, 0x02, 0, 0, 0, 0]) },
+    // Scroll up / down repeated every 20 ms while the wheel is tilted.
+    PhysicalButton { name: "tilt-left", code: 0x34, default: ButtonFunction([0x0e, 3, 0x09, 0x00, 0x14, 0, 0]) },
+    PhysicalButton { name: "tilt-right", code: 0x35, default: ButtonFunction([0x0e, 3, 0x0a, 0x00, 0x14, 0, 0]) },
+    // 788 DPI while held.
+    PhysicalButton { name: "clutch", code: 0x0f, default: ButtonFunction([0x06, 5, 0x05, 0x03, 0x14, 0x03, 0x14]) },
+    PhysicalButton { name: "profile", code: 0x0e, default: ButtonFunction([0x07, 1, 0x04, 0, 0, 0, 0]) },
+];
+
+const BUTTON_LISTS: [&[PhysicalButton]; 2] = [VIPER_BUTTONS, BASILISK_V2_BUTTONS];
+
+/// A physical button by config name, on any mouse in the table.
+pub fn physical_button(name: &str) -> Option<&'static PhysicalButton> {
+    BUTTON_LISTS.iter().flat_map(|l| l.iter()).find(|b| b.name == name)
+}
+
 pub struct Mouse {
     hid: HidDevice,
     spec: DeviceSpec,
@@ -423,8 +519,11 @@ impl Mouse {
     /// Open the first Razer mouse that is in the device table, or failing that
     /// any Razer device with a 90-byte control report as [`DeviceSpec::unknown`].
     /// Whether writes to an unverified mouse are allowed comes from the config file.
+    /// The mouse's config file becomes [`crate::config_path`].
     pub fn open() -> Result<Mouse> {
-        Mouse::open_with(crate::config::Config::allow_unverified_at(&crate::config_path()))
+        let mut m = Mouse::open_with(false)?;
+        m.allow_unverified = crate::config::Config::allow_unverified_at(&crate::config_path());
+        Ok(m)
     }
 
     pub fn open_with(allow_unverified: bool) -> Result<Mouse> {
@@ -438,6 +537,7 @@ impl Mouse {
             Err(e) => return Err(e),
         };
         let spec = DeviceSpec::lookup(hid.info.product_id);
+        crate::set_mouse_config(spec.config);
         Ok(Mouse { hid, spec, allow_unverified, profile: std::cell::Cell::new(1), macro_support: std::cell::Cell::new(None) })
     }
 
@@ -553,10 +653,17 @@ impl Mouse {
 
     // --- power ---
 
+    /// Battery level and charging state. A mouse without a battery answers a
+    /// firmware read instead, so this still tells an answering mouse from a
+    /// missing one, and reports itself as wired.
     pub fn battery(&self) -> Result<Battery> {
+        if !self.spec.battery {
+            self.firmware()?;
+            return Ok(Battery { percent: 100, charging: false, wired: true });
+        }
         let level = self.raw(&cmd::get_battery_level())?;
         let charging = self.raw(&cmd::get_charging_status())?;
-        Ok(Battery { percent: cmd::byte_to_percent(level.arguments[1]), charging: charging.arguments[1] != 0 })
+        Ok(Battery { percent: cmd::byte_to_percent(level.arguments[1]), charging: charging.arguments[1] != 0, wired: false })
     }
 
     /// Seconds of inactivity before the mouse sleeps (60..=900).
@@ -711,6 +818,31 @@ impl Mouse {
             return Err(HidError::Unsupported("sensor rotation is not supported on this mouse"));
         }
         self.raw(&sensor::set_angle(degrees != 0, degrees)).map(drop)
+    }
+
+    // --- lighting ---
+
+    fn led(&self, zone: &str) -> Result<u8> {
+        self.spec.lighting.iter().find(|(n, _)| *n == zone).map(|(_, l)| *l).ok_or(HidError::Unsupported("this mouse has no such lighting zone"))
+    }
+
+    /// A zone's effect; None when it runs one freenapse does not write (reactive, wave...).
+    pub fn lighting(&self, zone: &str) -> Result<Option<lighting::Effect>> {
+        let a = self.raw(&lighting::get_effect(self.led(zone)?))?.arguments;
+        Ok(lighting::decode_effect(&a))
+    }
+
+    pub fn set_lighting(&self, zone: &str, e: lighting::Effect) -> Result<()> {
+        self.raw(&lighting::set_effect(self.led(zone)?, e)).map(drop)
+    }
+
+    /// A zone's brightness, 0..=100 %.
+    pub fn brightness(&self, zone: &str) -> Result<u8> {
+        Ok(cmd::byte_to_percent(self.raw(&lighting::get_brightness(self.led(zone)?))?.arguments[2]))
+    }
+
+    pub fn set_brightness(&self, zone: &str, percent: u8) -> Result<()> {
+        self.raw(&lighting::set_brightness(self.led(zone)?, cmd::percent_to_byte(percent.min(100)))).map(drop)
     }
 
     /// Raw reads of every sensor register we know about, for diagnostics.
@@ -978,12 +1110,26 @@ mod tests {
         assert_eq!(wireless.rates_text(), "125/250/500/1000/2000/4000/8000");
         assert!(wireless.dpi_ok(35000) && !wireless.dpi_ok(35001) && !wireless.dpi_ok(99));
         // Every row has a distinct product id and a non-empty rate list.
+        for list in BUTTON_LISTS {
+            for (i, b) in list.iter().enumerate() {
+                assert!(list[..i].iter().all(|o| o.code != b.code && o.name != b.name), "duplicate button {}", b.name);
+                // A name means the same button on every mouse that has it.
+                assert_eq!(physical_button(b.name).map(|p| p.code), Some(b.code), "{}", b.name);
+            }
+        }
+        assert_eq!(&BASILISK_V2_BUTTONS[..7], VIPER_BUTTONS, "the art and the config expect the seven first");
+        // The Viper keeps config.toml; the Basilisk V2 has its own file and no battery.
+        let b = DeviceSpec::find(0x0085).unwrap();
+        assert!(b.verified && !b.battery && b.lighting.len() == 2);
+        assert_eq!(crate::config_file_name(b.config), "config-basilisk-v2.toml");
+        assert_eq!(crate::config_file_name(DeviceSpec::viper_v3_pro().config), "config.toml");
+        assert_eq!(crate::config_file_name(DeviceSpec::find(0x00C0).unwrap().config), "config.toml");
         for (i, d) in DEVICES.iter().enumerate() {
             assert!(!d.polling_rates.is_empty(), "{}", d.name);
             assert!(DEVICES[..i].iter().all(|o| o.product_id != d.product_id), "duplicate 0x{:04x}", d.product_id);
         }
-        // Only the author's mouse is verified so far.
-        assert_eq!(DEVICES.iter().filter(|d| d.verified).count(), 2);
+        // The author's Viper V3 Pro (wired and wireless) and Basilisk V2.
+        assert_eq!(DEVICES.iter().filter(|d| d.verified).count(), 3);
     }
 
     #[test]

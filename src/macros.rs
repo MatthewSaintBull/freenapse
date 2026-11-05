@@ -452,9 +452,10 @@ pub fn get_storage_info() -> Report {
 pub fn get_count() -> Report {
     Report::new(TID_MOUSE, CLASS, 0x80, 0x02)
 }
-/// Ids of the stored macros: [offset u16, count u16, id u16...].
+/// Ids of the stored macros: [offset u16, count u16, id u16...]. Read back
+/// on a Basilisk V2 holding two Synapse macros (0x81 answers all zeros there).
 pub fn get_id_list() -> Report {
-    Report::new(TID_MOUSE, CLASS, 0x81, 0x50)
+    Report::new(TID_MOUSE, CLASS, 0x8b, 0x50)
 }
 pub fn create(id: u16) -> Report {
     Report::new(TID_MOUSE, CLASS, 0x02, 0x02).with_args(&id.to_be_bytes())

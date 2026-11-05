@@ -2,7 +2,7 @@
 //! when it differs, so repeated runs do not wear the onboard flash.
 
 use crate::config::{Config, button_target, parse_button, spec_for};
-use crate::device::{BUTTONS, ButtonFunction, Mouse};
+use crate::device::{ButtonFunction, Mouse};
 use crate::hid::{HidError, Result};
 use crate::sensor;
 
@@ -63,6 +63,15 @@ pub fn import(mouse: &Mouse) -> Result<Config> {
         }
     }
 
+    for (zone, _) in mouse.spec().lighting {
+        if let (Ok(Some(e)), Some(slot)) = (mouse.lighting(zone), cfg.lighting.zone_mut(zone)) {
+            *slot = Some(e.spec());
+        }
+        if cfg.lighting.brightness.is_none() {
+            cfg.lighting.brightness = mouse.brightness(zone).ok();
+        }
+    }
+
     cfg.profile.active = mouse.profile();
     // Macros already in the mouse (Synapse's or ours): keep them so their bindings stay valid.
     if let Ok(ids) = mouse.macro_ids().and_then(|ids| if mouse.macro_support()? { Ok(ids) } else { Ok(Vec::new()) }) {
@@ -73,10 +82,11 @@ pub fn import(mouse: &Mouse) -> Result<Config> {
             cfg.macros.push(crate::config::MacroConfig { id, name, events });
         }
     }
-    for (name, code) in BUTTONS {
+    for b in mouse.spec().buttons {
+        let name = b.name;
         for hs in [false, true] {
-            let Ok(f) = mouse.button(mouse.profile(), code, hs) else { continue };
-            if f == ButtonFunction::mouse_button(code) {
+            let Ok(f) = mouse.button(mouse.profile(), b.code, hs) else { continue };
+            if f == b.default {
                 continue;
             }
             if let Some(spec) = spec_for(&f) {
@@ -157,12 +167,12 @@ pub fn apply(mouse: &Mouse, cfg: &Config, polling_rate: u16) -> Result<Vec<Strin
         changes.push(format!("polling -> {polling_rate} Hz"));
     }
 
-    if mouse.idle_time()? != cfg.power.idle_seconds {
+    if mouse.spec().battery && mouse.idle_time()? != cfg.power.idle_seconds {
         mouse.set_idle_time(cfg.power.idle_seconds)?;
         changes.push(format!("idle sleep -> {} s", cfg.power.idle_seconds));
     }
 
-    if mouse.low_battery_threshold()? != cfg.power.low_battery_percent {
+    if mouse.spec().battery && mouse.low_battery_threshold()? != cfg.power.low_battery_percent {
         mouse.set_low_battery_threshold(cfg.power.low_battery_percent)?;
         changes.push(format!("low battery -> {}%", cfg.power.low_battery_percent));
     }
@@ -207,17 +217,19 @@ pub fn apply(mouse: &Mouse, cfg: &Config, polling_rate: u16) -> Result<Vec<Strin
         changes.push(format!("dongle led -> {}", cfg.dongle.led));
     }
 
+    changes.extend(apply_lighting(mouse, cfg)?);
     changes.extend(apply_macros(mouse, cfg)?);
 
     // Every button of both layers: a key missing from [buttons] means its default function.
     let onboard = mouse.macro_support()?;
-    for (name, code) in BUTTONS {
+    for b in mouse.spec().buttons {
+        let (name, code) = (b.name, b.code);
         for hs in [false, true] {
             let key = if hs { format!("hypershift.{name}") } else { name.to_string() };
             let spec = cfg.buttons.get(&key);
             let func = match spec.map(|s| parse_button(s)) {
                 Some(Ok(Some(f))) => cfg.resolve_button(f, onboard),
-                _ => ButtonFunction::mouse_button(code),
+                _ => b.default,
             };
             if mouse.button(mouse.profile(), code, hs)? != func {
                 mouse.set_button(mouse.profile(), code, hs, func)?;
@@ -227,6 +239,28 @@ pub fn apply(mouse: &Mouse, cfg: &Config, polling_rate: u16) -> Result<Vec<Strin
     }
     let _ = button_target;
 
+    Ok(changes)
+}
+
+/// Write the `[lighting]` table: each zone the config names and the mouse has,
+/// and the brightness of every zone. Zones the config leaves out are untouched.
+pub fn apply_lighting(mouse: &Mouse, cfg: &Config) -> Result<Vec<String>> {
+    let mut changes = Vec::new();
+    for (zone, _) in mouse.spec().lighting {
+        if let Some(spec) = cfg.lighting.zone(zone) {
+            let Ok(e) = crate::lighting::Effect::parse(spec) else { continue };
+            if mouse.lighting(zone)? != Some(e) {
+                mouse.set_lighting(zone, e)?;
+                changes.push(format!("lighting {zone} -> {spec}"));
+            }
+        }
+        if let Some(b) = cfg.lighting.brightness
+            && mouse.brightness(zone)? != b
+        {
+            mouse.set_brightness(zone, b)?;
+            changes.push(format!("brightness {zone} -> {b}%"));
+        }
+    }
     Ok(changes)
 }
 
@@ -263,14 +297,14 @@ pub fn apply_macros(mouse: &Mouse, cfg: &Config) -> Result<Vec<String>> {
 pub fn apply_game_buttons(mouse: &Mouse, cfg: &Config, game: Option<&crate::config::GameOverrides>) -> Result<bool> {
     let mut written = false;
     let onboard = mouse.macro_support()?;
-    for (name, code) in BUTTONS {
-        let spec = game.and_then(|g| g.buttons.get(name)).or_else(|| cfg.buttons.get(name));
+    for b in mouse.spec().buttons {
+        let spec = game.and_then(|g| g.buttons.get(b.name)).or_else(|| cfg.buttons.get(b.name));
         let func = match spec.map(|s| parse_button(s)) {
             Some(Ok(Some(f))) => cfg.resolve_button(f, onboard),
-            _ => ButtonFunction::mouse_button(code),
+            _ => b.default,
         };
-        if mouse.button(mouse.profile(), code, false)? != func {
-            mouse.set_button(mouse.profile(), code, false, func)?;
+        if mouse.button(mouse.profile(), b.code, false)? != func {
+            mouse.set_button(mouse.profile(), b.code, false, func)?;
             written = true;
         }
     }
