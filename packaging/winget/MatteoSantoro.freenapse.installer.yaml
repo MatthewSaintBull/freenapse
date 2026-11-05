@@ -4,14 +4,14 @@
 # installer and no registry entries. The SHA-256 is the release's
 # freenapse.exe.sha256, uppercase as winget wants it.
 PackageIdentifier: MatteoSantoro.freenapse
-PackageVersion: 0.3.0
+PackageVersion: 0.3.1
 InstallerType: portable
 Commands:
   - freenapse
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/MatthewSaintBull/freenapse/releases/download/v0.3.0/freenapse.exe
-    InstallerSha256: E8C80584CB5A76D36DDE506CF8253AE6E750E8A050D31A3F027A57606266A66B
+    InstallerUrl: https://github.com/MatthewSaintBull/freenapse/releases/download/v0.3.1/freenapse.exe
+    InstallerSha256: 611318ACA33A1B412D855FF314E3ADE65EDEB1ACB5A32C6E37DD9EB39D4EF1F0
 ReleaseDate: 2026-10-30
 ManifestType: installer
 ManifestVersion: 1.6.0

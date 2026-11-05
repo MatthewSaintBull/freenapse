@@ -1,5 +1,5 @@
 {
-    "version": "0.3.0",
+    "version": "0.3.1",
     "description": "Configure a Razer Viper V3 Pro on Windows without Razer Synapse: onboard DPI, polling rate, buttons, macros, sensor and power settings; tray app and settings window in one portable executable.",
     "homepage": "https://freenapse.app",
     "license": "MIT",
@@ -10,8 +10,8 @@
     ],
     "architecture": {
         "64bit": {
-            "url": "https://github.com/MatthewSaintBull/freenapse/releases/download/v0.3.0/freenapse.exe",
-            "hash": "e8c80584cb5a76d36dde506cf8253ae6e750e8a050d31a3f027a57606266a66b"
+            "url": "https://github.com/MatthewSaintBull/freenapse/releases/download/v0.3.1/freenapse.exe",
+            "hash": "611318aca33a1b412d855ff314e3ade65edeb1acb5a32c6e37dd9eb39d4ef1f0"
         }
     },
     "bin": "freenapse.exe",
