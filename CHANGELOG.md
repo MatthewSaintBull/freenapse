@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Fix: started at login, the tray app could run without its icon. Right
+  after sign-in the taskbar often refuses new icons, and the tray never
+  tried again: it lived in a message-only window, which does not receive
+  the TaskbarCreated broadcast. The window is now a hidden top-level one,
+  and a refused icon is retried every two seconds until the taskbar takes
+  it. The icon also comes back after Explorer restarts.
+
 ## 0.4.1 (2026-11-05)
 
 - Devices page in the settings window: every mouse of the device table,

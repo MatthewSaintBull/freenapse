@@ -34,6 +34,8 @@ const TIMER_REPLUG: usize = 4;
 const TIMER_CONFIG: usize = 5;
 /// The daily update check.
 const TIMER_UPDATE: usize = 6;
+/// Retries adding the tray icon until the taskbar takes it (at login it is often not ready yet).
+const TIMER_ICON: usize = 7;
 /// Posted by the config watcher thread when something in the config folder changed.
 const WM_CONFIG_FILE: u32 = WM_APP + 6;
 /// Posted by the update thread: lparam is a `Box<String>` with the newer tag, or 0.
@@ -71,6 +73,8 @@ struct App {
     last_error: Option<String>,
     last_refresh: Option<Instant>,
     taskbar_created: u32,
+    /// The taskbar has the icon. False until Shell_NotifyIcon succeeds.
+    icon_shown: bool,
     /// Modification time of the config file as last loaded, to tell an edit from our own save.
     config_mtime: Option<std::time::SystemTime>,
     /// A newer release on GitHub (version without the `v`), shown in the menu and tooltip.
@@ -97,7 +101,7 @@ pub fn run(open_settings: bool) {
         let mutex = CreateMutexW(ptr::null(), 1, wide("Local\\freenapse-tray").as_ptr());
         if mutex == 0 || GetLastError() == ERROR_ALREADY_EXISTS {
             // Already running: launching again opens the settings window, like Synapse.
-            let existing = FindWindowExW(HWND_MESSAGE, 0, class_name.as_ptr(), ptr::null());
+            let existing = FindWindowW(class_name.as_ptr(), ptr::null());
             if existing != 0 {
                 PostMessageW(existing, WM_OPEN_SETTINGS, 0, 0);
             }
@@ -150,13 +154,18 @@ pub fn run(open_settings: bool) {
             last_error: None,
             last_refresh: None,
             taskbar_created: RegisterWindowMessageW(wide("TaskbarCreated").as_ptr()),
+            icon_shown: false,
             config_mtime: None,
             update_tag: None,
             notified_update: false,
         });
         let app_ptr = Box::into_raw(app);
 
-        let hwnd = CreateWindowExW(0, class_name.as_ptr(), wide("freenapse").as_ptr(), 0, 0, 0, 0, 0, HWND_MESSAGE, 0, hinstance, app_ptr as *const c_void);
+        // A hidden top-level window, not a message-only one: only top-level windows
+        // receive the TaskbarCreated broadcast that says the taskbar is ready for
+        // the icon (at login, and after Explorer restarts).
+        let hwnd =
+            CreateWindowExW(WS_EX_TOOLWINDOW, class_name.as_ptr(), wide("freenapse").as_ptr(), WS_POPUP, 0, 0, 0, 0, 0, 0, hinstance, app_ptr as *const c_void);
         if hwnd == 0 {
             return;
         }
@@ -183,6 +192,8 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             let app = (*cs).lpCreateParams as *mut App;
             SetWindowLongPtrW(hwnd, GWLP_USERDATA, app as isize);
             (*app).hwnd = hwnd;
+            // Let TaskbarCreated through even if the process runs elevated.
+            ChangeWindowMessageFilterEx(hwnd, (*app).taskbar_created, MSGFLT_ALLOW, ptr::null_mut());
             (*app).add_icon();
             (*app).refresh();
             let poll_ms = (*app).config.tray.poll_seconds.max(5) * 1000;
@@ -232,6 +243,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
                         check_updates(hwnd);
                     }
                 }
+                TIMER_ICON => (*app).show_icon(),
                 _ => {}
             }
             0
@@ -267,9 +279,9 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             }
             match msg {
                 m if m == (*app).taskbar_created => {
-                    // Explorer restarted: put the icon back.
-                    Shell_NotifyIconW(NIM_ADD, &(*app).nid);
-                    Shell_NotifyIconW(NIM_SETVERSION, &(*app).nid);
+                    // The taskbar is (again) ready: at login, or after Explorer restarted.
+                    (*app).icon_shown = false;
+                    (*app).show_icon();
                     0
                 }
                 WM_OPEN_SETTINGS => {
@@ -348,8 +360,26 @@ impl App {
         self.nid.Anonymous.uVersion = NOTIFYICON_VERSION_4;
         self.set_icon();
         copy_wide(&mut self.nid.szTip, "freenapse: connecting...");
-        Shell_NotifyIconW(NIM_ADD, &self.nid);
-        Shell_NotifyIconW(NIM_SETVERSION, &self.nid);
+        self.show_icon();
+    }
+
+    /// Put the icon in the notification area. Right after login the taskbar
+    /// often refuses it, so a failure retries every two seconds until it works
+    /// (TaskbarCreated also triggers a new try).
+    unsafe fn show_icon(&mut self) {
+        if !self.icon_shown {
+            self.nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP | NIF_SHOWTIP;
+            // NIM_MODIFY succeeds when the icon is already there (a NIM_ADD that timed out may still have landed).
+            self.icon_shown = Shell_NotifyIconW(NIM_ADD, &self.nid) != 0 || Shell_NotifyIconW(NIM_MODIFY, &self.nid) != 0;
+            if self.icon_shown {
+                Shell_NotifyIconW(NIM_SETVERSION, &self.nid);
+            }
+        }
+        if self.icon_shown {
+            KillTimer(self.hwnd, TIMER_ICON);
+        } else {
+            SetTimer(self.hwnd, TIMER_ICON, 2000, None);
+        }
     }
 
     unsafe fn set_icon(&mut self) {
