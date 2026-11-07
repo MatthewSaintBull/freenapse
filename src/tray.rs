@@ -196,6 +196,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             ChangeWindowMessageFilterEx(hwnd, (*app).taskbar_created, MSGFLT_ALLOW, ptr::null_mut());
             (*app).add_icon();
             (*app).refresh();
+            (*app).repair_autostart();
             let poll_ms = (*app).config.tray.poll_seconds.max(5) * 1000;
             SetTimer(hwnd, TIMER_POLL, poll_ms, None);
             SetTimer(hwnd, TIMER_GAME, 2000, None);
@@ -218,7 +219,10 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
                 return 0;
             }
             match wparam {
-                TIMER_POLL => (*app).refresh(),
+                TIMER_POLL => {
+                    (*app).refresh();
+                    (*app).repair_autostart();
+                }
                 TIMER_GAME => (*app).check_game(),
                 TIMER_RETRY => {
                     // Settings could not be written while the mouse was asleep: try again once it moves.
@@ -258,6 +262,14 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
                 ui::open(hwnd);
             }
             0
+        }
+        WM_QUERYENDSESSION => {
+            // Signing out or shutting down: make sure the next sign-in starts the tray.
+            let app = app_from(hwnd);
+            if !app.is_null() {
+                (*app).repair_autostart();
+            }
+            1
         }
         WM_DESTROY => {
             let app = app_from(hwnd);
@@ -427,6 +439,17 @@ impl App {
         copy_wide(&mut self.nid.szTip, &tip);
         self.nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP | NIF_SHOWTIP;
         Shell_NotifyIconW(NIM_MODIFY, &self.nid);
+    }
+
+    /// Point the "start at login" entry at this executable again when it broke, and say so.
+    unsafe fn repair_autostart(&mut self) {
+        if crate::autostart::repair() {
+            self.notify(
+                "freenapse starts at login again",
+                "The entry that starts freenapse at login was missing or pointed to another copy of freenapse.exe. It now starts this one.",
+                false,
+            );
+        }
     }
 
     unsafe fn notify(&mut self, title: &str, text: &str, warning: bool) {

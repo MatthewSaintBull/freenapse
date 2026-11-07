@@ -8,6 +8,15 @@
   the TaskbarCreated broadcast. The window is now a hidden top-level one,
   and a refused icon is retried every two seconds until the taskbar takes
   it. The icon also comes back after Explorer restarts.
+- Fix: "Start at login" stopped working once freenapse.exe was moved or
+  replaced by a download with another name (`freenapse (1).exe`): the
+  entry still named the old file, so Windows skipped it at login and Task
+  Manager no longer listed it. The choice is now stored on its own
+  (`HKCU\Softwarereenapse`, `StartAtLogin`), and the tray app points the
+  entry at the copy that is running, at start, on every refresh and at
+  sign-out. It also puts back an entry another program deleted, and says so
+  in a notification. The toggle shows off when the entry names a file that
+  is gone.
 
 ## 0.4.1 (2026-11-05)
 
