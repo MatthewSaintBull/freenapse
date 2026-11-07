@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.2 (2026-11-07)
 
 - Fix: started at login, the tray app could run without its icon. Right
   after sign-in the taskbar often refuses new icons, and the tray never
@@ -17,6 +17,10 @@
   sign-out. It also puts back an entry another program deleted, and says so
   in a notification. The toggle shows off when the entry names a file that
   is gone.
+
+  If start at login already stopped working for you, open freenapse once
+  after updating (the tray app does the repair), and it starts at login
+  again from then on.
 
 ## 0.4.1 (2026-11-05)
 
