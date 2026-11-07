@@ -12,7 +12,7 @@
   replaced by a download with another name (`freenapse (1).exe`): the
   entry still named the old file, so Windows skipped it at login and Task
   Manager no longer listed it. The choice is now stored on its own
-  (`HKCU\Softwarereenapse`, `StartAtLogin`), and the tray app points the
+  (`HKCU\Software\freenapse`, `StartAtLogin`), and the tray app points the
   entry at the copy that is running, at start, on every refresh and at
   sign-out. It also puts back an entry another program deleted, and says so
   in a notification. The toggle shows off when the entry names a file that
