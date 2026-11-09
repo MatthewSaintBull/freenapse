@@ -69,6 +69,8 @@ struct App {
     game_mode: Option<String>,
     /// Game profile that should be on the mouse but could not be written yet (mouse asleep).
     game_wanted: Option<Option<String>>,
+    /// The DPI stage the mouse was on before a game's profile changed it; put back when the game goes away.
+    stage_before_game: Option<u8>,
     notified_low: bool,
     last_error: Option<String>,
     last_refresh: Option<Instant>,
@@ -150,6 +152,7 @@ pub fn run(open_settings: bool) {
             config_file: config_path(),
             game_mode: None,
             game_wanted: None,
+            stage_before_game: None,
             notified_low: false,
             last_error: None,
             last_refresh: None,
@@ -595,21 +598,36 @@ impl App {
         };
         let cfg = &self.config;
         let over = wanted.as_deref().and_then(|g| cfg.game_by_key(g));
-        let result: Result<(), crate::hid::HidError> = (|| {
+        let in_game = self.game_mode.is_some();
+        let mut before = self.stage_before_game;
+        // The stage to remember: the one the mouse was on before the first game profile touched it.
+        let result: Result<Option<u8>, crate::hid::HidError> = (|| {
             let polling = over.as_ref().map(|g| g.polling).unwrap_or(cfg.polling.rate);
             if mouse.polling_rate().ok() != Some(polling) {
                 mouse.set_polling_rate(polling)?;
             }
-            let stage = over.as_ref().and_then(|g| g.dpi_stage).unwrap_or(cfg.dpi.active);
             let st = mouse.dpi_stages()?;
-            if st.active != stage {
+            // A game's stage replaces the one picked with the DPI button; when no game is left,
+            // that one comes back. A game without a stage of its own leaves the stage alone.
+            let stage = match over.as_ref().and_then(|g| g.dpi_stage) {
+                Some(s) => {
+                    if !in_game {
+                        before = Some(st.active);
+                    }
+                    Some(s)
+                }
+                None if over.is_some() => None,
+                None => before.take(),
+            };
+            if let Some(stage) = stage.filter(|s| *s != st.active && (1..=st.stages.len() as u8).contains(s)) {
                 mouse.set_dpi_stages(stage, &st.stages)?;
             }
             apply::apply_game_buttons(mouse, cfg, over.as_ref())?;
-            Ok(())
+            Ok(before)
         })();
         match result {
-            Ok(()) => {
+            Ok(before) => {
+                self.stage_before_game = before;
                 self.game_mode = wanted;
                 self.game_wanted = None;
                 self.polling = mouse.polling_rate().ok();

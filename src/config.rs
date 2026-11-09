@@ -25,7 +25,8 @@ allow_unverified = false
 [dpi]
 # Up to 5 stages, cycled with the button under the mouse. Range 100..35000.
 stages = [400, 800, 1600, 3200, 6400]
-# 1-based index of the stage to activate.
+# 1-based index of the stage to select when the stages are written. A stage picked
+# with the mouse's DPI button is kept: the tray menu and the window follow the mouse.
 active = 2
 # Optional vertical DPI per stage (independent X/Y sensitivity). Empty = same as the stage value.
 y_stages = []
@@ -80,12 +81,13 @@ active = 1
 # Onboard remaps for the profile above. Omitted buttons keep their current assignment.
 # Values: "default", "disabled", "mouse:left|right|middle|back|forward|scroll-up|scroll-down",
 #         "double-click", "turbo:left:10" (mouse button repeated N times a second while held),
-#         "dpi-up", "dpi-down", "dpi-stage:N", "hypershift", "key:ctrl+shift+c", "key:f5",
+#         "dpi-cycle", "dpi-up", "dpi-down", "dpi-stage:N", "hypershift", "key:ctrl+shift+c", "key:f5",
 #         "turbo-key:space:8" (key repeated N times a second while held),
 #         "media:play-pause|mute|vol-up|vol-down|next|prev", "system:sleep|power|wake",
 #         "clutch:400" (that DPI while held), "profile-next|profile-prev|profile-cycle-up|profile-cycle-down"
-# Buttons beyond the seven above exist on some mice; the Basilisk V2 adds dpi-up, dpi-down,
-# tilt-left, tilt-right, clutch and profile (e.g. "tilt-left" = "media:prev").
+# The eighth button, dpi (under the Viper V3 Pro, on top of the Pro Click V2 Vertical), cycles the
+# stages by default ("dpi-cycle"). The Basilisk V2 has dpi-up, dpi-down, tilt-left, tilt-right,
+# clutch and profile instead (e.g. "tilt-left" = "media:prev").
 # Prefix with "hypershift." to bind the Hypershift layer, e.g. "hypershift.back" = "dpi-stage:5".
 # back = "default"
 # forward = "default"
@@ -537,7 +539,7 @@ impl Config {
     /// True when some button of the normal layer (with a game's overrides on
     /// top) still clicks: a mouse with no left click cannot be used to fix it.
     pub fn has_left_click(&self, game: Option<&GameConfig>) -> bool {
-        crate::device::BUTTONS.iter().any(|(name, code)| {
+        crate::device::CLICK_CODES.iter().any(|(name, code)| {
             let spec = game.and_then(|g| g.buttons.get(*name)).or_else(|| self.buttons.get(*name));
             match spec.map(|s| parse_button(s)) {
                 None | Some(Ok(None)) => *code == 0x01,
@@ -825,6 +827,9 @@ pub fn parse_button(spec: &str) -> Result<Option<ButtonFunction>, String> {
     if spec == "disabled" {
         return Ok(Some(ButtonFunction::DISABLED));
     }
+    if spec == "dpi-cycle" {
+        return Ok(Some(ButtonFunction::dpi_cycle()));
+    }
     if spec == "dpi-up" {
         return Ok(Some(ButtonFunction::dpi_cycle_up()));
     }
@@ -1040,7 +1045,7 @@ pub fn spec_for(f: &ButtonFunction) -> Option<String> {
     Some(match d[0] {
         0x00 => "disabled".to_string(),
         0x01 => {
-            let name = crate::device::BUTTONS.iter().find(|(_, c)| *c == d[2])?.0;
+            let name = crate::device::CLICK_CODES.iter().find(|(_, c)| *c == d[2])?.0;
             format!("mouse:{name}")
         }
         0x02 => {
@@ -1054,7 +1059,7 @@ pub fn spec_for(f: &ButtonFunction) -> Option<String> {
             format!("turbo-key:{}:{}", parts.join("+"), f.turbo_rate()?)
         }
         0x0e => {
-            let name = crate::device::BUTTONS.iter().find(|(_, c)| *c == d[2])?.0;
+            let name = crate::device::CLICK_CODES.iter().find(|(_, c)| *c == d[2])?.0;
             format!("turbo:{name}:{}", f.turbo_rate()?)
         }
         0x0b => "double-click".to_string(),
@@ -1081,6 +1086,7 @@ pub fn spec_for(f: &ButtonFunction) -> Option<String> {
             (0x01, _) => "dpi-up".to_string(),
             (0x02, _) => "dpi-down".to_string(),
             (0x03, n) if (1..=5).contains(&n) => format!("dpi-stage:{n}"),
+            (0x06, _) => "dpi-cycle".to_string(),
             (0x05, _) => {
                 let (x, y) = f.clutch_dpi()?;
                 if x == y { format!("clutch:{x}") } else { format!("clutch:{x}:{y}") }
@@ -1279,6 +1285,7 @@ mod tests {
             "key:ctrl+shift+f5",
             "key:space",
             "media:mute",
+            "dpi-cycle",
             "dpi-up",
             "dpi-stage:4",
             "hypershift",

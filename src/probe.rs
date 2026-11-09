@@ -4,8 +4,8 @@
 //! "Adding a mouse"). Nothing here writes to the mouse. Serial numbers are
 //! masked unless asked for: they identify one unit and add nothing to a table row.
 
-use crate::device::{ButtonFunction, DeviceSpec, Mouse, mouse_button_name};
-use crate::hid::{HidError, Result};
+use crate::device::{ButtonFunction, DeviceSpec, Mouse, VENDOR_RAZER};
+use crate::hid::{HidDevice, HidError, Result};
 use crate::macros;
 use crate::protocol::{Report, Status, TID_DONGLE, TID_MOUSE, cmd};
 use crate::sensor;
@@ -26,9 +26,9 @@ pub const BUTTON_SCAN: std::ops::RangeInclusive<u8> = 0x01..=0x7f;
 pub fn button_line(code: u8, r: &Report) -> String {
     let mut f = [0u8; 7];
     f.copy_from_slice(&r.arguments[3..10]);
-    let known = match mouse_button_name(code) {
-        "?" => String::new(),
-        name => format!("  [freenapse calls it {name}]"),
+    let known = match crate::device::button_name(code) {
+        None => String::new(),
+        Some(name) => format!("  [freenapse calls it {name}]"),
     };
     format!(
         "{:<22} tid {:02x} 02/8c/0a  status={:02x} function {} = {}{known}",
@@ -91,10 +91,16 @@ struct Probe<'a> {
     mouse: &'a Mouse,
     /// The transaction id the mouse answered the first command on.
     tid: u8,
-    out: Vec<String>,
+    /// Where each line goes as soon as it exists (the terminal, while the probe
+    /// runs for half a minute).
+    emit: &'a mut dyn FnMut(String),
 }
 
 impl Probe<'_> {
+    fn say(&mut self, text: impl Into<String>) {
+        (self.emit)(text.into());
+    }
+
     /// Send one read (re-addressed to the transaction id that answers), print
     /// the raw line and, when it answered, the decoded one.
     fn read(&mut self, label: &str, req: Report, decode: &dyn Fn(&Report) -> Option<String>) -> Option<Report> {
@@ -109,10 +115,10 @@ impl Probe<'_> {
         }
         let r = self.mouse.raw_as_is(&req);
         let shown = if mask { r.as_ref().map(mask_serial).map_err(Clone::clone) } else { r.clone() };
-        self.out.push(line(label, &req, &shown));
+        self.say(line(label, &req, &shown));
         if let Ok(r) = &shown {
             if let Some(d) = decode(r) {
-                self.out.push(note(if mask { format!("{d}  (masked; `freenapse probe --serials` shows it)") } else { d }));
+                self.say(note(if mask { format!("{d}  (masked; `freenapse probe --serials` shows it)") } else { d }));
             }
         }
         r.ok()
@@ -132,7 +138,7 @@ impl Probe<'_> {
             req.transaction_id = self.tid;
             match self.mouse.raw_as_is(&req) {
                 Ok(r) if r.arguments[3..10].iter().all(|b| *b == 0) => disabled.push(code),
-                Ok(r) => self.out.push(button_line(code, &r)),
+                Ok(r) => self.say(button_line(code, &r)),
                 Err(HidError::Status(Status::Failure)) => failed.push(code),
                 Err(HidError::Status(Status::NotSupported)) => unsupported.push(code),
                 Err(HidError::Status(Status::Timeout)) => timed_out.push(code),
@@ -141,35 +147,56 @@ impl Probe<'_> {
         }
         let codes = |v: &[u8]| code_ranges(v);
         if !disabled.is_empty() {
-            self.out.push(note(format!("answered, function disabled (all zero): {}", codes(&disabled))));
+            self.say(note(format!("answered, function disabled (all zero): {}", codes(&disabled))));
         }
         if !failed.is_empty() {
-            self.out.push(note(format!("no button (status 03): {}", codes(&failed))));
+            self.say(note(format!("no button (status 03): {}", codes(&failed))));
         }
         if !unsupported.is_empty() {
-            self.out.push(note(format!("no button (status 05): {}", codes(&unsupported))));
+            self.say(note(format!("no button (status 05): {}", codes(&unsupported))));
         }
         if !timed_out.is_empty() {
-            self.out.push(note(format!("timed out, mouse asleep? keep it moving and probe again: {}", codes(&timed_out))));
+            self.say(note(format!("timed out, mouse asleep? keep it moving and probe again: {}", codes(&timed_out))));
         }
         if !other.is_empty() {
-            self.out.push(note(format!("other errors: {}", other.join(", "))));
+            self.say(note(format!("other errors: {}", other.join(", "))));
         }
     }
 
     fn blank(&mut self) {
-        self.out.push(String::new());
+        self.say(String::new());
     }
 }
 
 /// Run every read and return the report, fenced as a code block. Serial
 /// numbers are masked unless `show_serials`.
 pub fn run(mouse: &Mouse, show_serials: bool) -> Vec<String> {
+    let mut out = Vec::new();
+    run_with(mouse, show_serials, &mut |l| out.push(l));
+    out
+}
+
+/// [`run`], handing each line to `emit` as soon as it is known.
+pub fn run_with(mouse: &Mouse, show_serials: bool, emit: &mut dyn FnMut(String)) {
     let spec = mouse.spec();
-    let mut p = Probe { mouse, tid: spec.transaction_id, out: vec!["```text".to_string()] };
-    p.out.push(format!("freenapse {} probe", env!("CARGO_PKG_VERSION")));
-    p.out.push(format!("vendor id 0x{:04x}  product id 0x{:04x}  table: {}", mouse.vendor_id(), mouse.product_id(), describe_spec(spec)));
-    p.out.push(format!("hid path {}", mouse.path()));
+    let mut p = Probe { mouse, tid: spec.transaction_id, emit };
+    p.say("```text");
+    p.say(format!("freenapse {} probe", env!("CARGO_PKG_VERSION")));
+    p.say(format!("vendor id 0x{:04x}  product id 0x{:04x}  table: {}", mouse.vendor_id(), mouse.product_id(), describe_spec(spec)));
+    p.say(format!("hid path {}", mouse.path()));
+    // A dongle and a cable of one mouse, or a second Razer device, show up here
+    // (one line per product id: a device may expose several control collections).
+    let mut seen = vec![mouse.product_id()];
+    let mut others: Vec<String> = Vec::new();
+    for i in HidDevice::control_interfaces(VENDOR_RAZER) {
+        if !seen.contains(&i.product_id) {
+            seen.push(i.product_id);
+            others.push(format!("0x{:04x} ({})", i.product_id, describe_spec(&DeviceSpec::lookup(i.product_id))));
+        }
+    }
+    if !others.is_empty() {
+        p.say(format!("other razer control interfaces: {}", others.join(", ")));
+    }
     p.blank();
 
     // Which transaction id the mouse answers: the table's first, then the others.
@@ -179,16 +206,22 @@ pub fn run(mouse: &Mouse, show_serials: bool) -> Vec<String> {
     for t in order {
         let req = cmd::firmware_version(t);
         let r = mouse.raw_as_is(&req);
-        p.out.push(line("mouse firmware", &req, &r));
+        p.say(line("mouse firmware", &req, &r));
         if let Ok(r) = r {
-            p.out.push(note(format!("firmware {}.{}  (transaction id {t:02x} answers)", r.arguments[0], r.arguments[1])));
+            p.say(note(format!("firmware {}.{}  (transaction id {t:02x} answers)", r.arguments[0], r.arguments[1])));
             p.tid = t;
             answered = true;
             break;
         }
     }
     if !answered {
-        p.out.push(note("no transaction id answered: is the mouse awake? keep moving it and run the probe again"));
+        p.say(note("no transaction id answered: is the mouse awake? keep moving it and run the probe again"));
+        if !others.is_empty() {
+            p.say(note("this interface may be a dongle whose mouse is on its cable or switched off; the other interfaces above did not answer either when freenapse chose this one"));
+        }
+        p.say(note("the remaining reads would all time out (about a second each): stopping here"));
+        p.say("```");
+        return;
     }
 
     p.read_masked("mouse serial", cmd::serial(TID_MOUSE), &|r| Some(ascii(&r.arguments[..22])), !show_serials);
@@ -239,7 +272,7 @@ pub fn run(mouse: &Mouse, show_serials: bool) -> Vec<String> {
                 .unwrap_or_else(|| "code not in the 1000=01 500=02 250=04 125=08 table".into()),
         )
     });
-    p.out.push(note(match (hp.is_some(), cl.is_some()) {
+    p.say(note(match (hp.is_some(), cl.is_some()) {
         (true, true) => "both polling commands answered: the table row should say which one Synapse uses",
         (true, false) => "the HyperPolling command (00/40 set, 00/C0 get) is the one to use",
         (false, true) => "the classic command (00/05 set, 00/85 get) is the one to use",
@@ -271,8 +304,7 @@ pub fn run(mouse: &Mouse, show_serials: bool) -> Vec<String> {
     p.blank();
     p.buttons();
 
-    p.out.push("```".to_string());
-    p.out
+    p.say("```");
 }
 
 fn describe_spec(spec: &DeviceSpec) -> String {
@@ -336,6 +368,8 @@ mod tests {
         assert!(l.starts_with(&format!("{:<22} tid 1f 02/8c/0a  status=02 function 01 01 04 00 00 00 00 = mouse button back", "button 04")), "{l}");
         assert!(l.ends_with("[freenapse calls it back]"), "{l}");
         let l = button_line(0x60, &r);
+        assert!(l.ends_with("[freenapse calls it dpi]"), "{l}");
+        let l = button_line(0x61, &r);
         assert!(!l.contains("freenapse calls it"), "{l}");
         assert_eq!(BUTTON_SCAN.count(), 127);
         assert_eq!(code_ranges(&[0x06, 0x07, 0x08, 0x0b, 0x60, 0x7e, 0x7f]), "06-08 0b 60 7e-7f");

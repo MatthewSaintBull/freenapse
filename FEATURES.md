@@ -56,7 +56,8 @@ the unverified rows come from OpenRazer's device list.
 | Viper Mini SE, wired / wireless | 0x009E / 0x009F | 0x1f | HyperPolling | 125, 500, 1000 / 125 .. 8000 | 30000 | ❓ | wireless | nobody yet |
 | Viper 8KHz | 0x0091 | 0xff | HyperPolling | 125, 500 .. 8000 | 20000 | ❓ | — | nobody yet |
 | Cobra Pro, wired / wireless | 0x00AF / 0x00B0 | 0x1f | classic | 125, 500, 1000 | 30000 | ❓ | — | nobody yet |
-| Pro Click V2 Vertical, HyperSpeed dongle | 0x00C8 | 0x1f | classic | 125, 500, 1000 | 30000 | ❓ | — | nobody yet (probe in issue 4) |
+| Pro Click V2 Vertical, HyperSpeed dongle | 0x00C8 | 0x1f | classic | 125, 500, 1000 | 30000 | ❓ | — | Kosminaut13 (issue 4) |
+| Pro Click V2 Vertical, wired | 0x00C7 | 0x1f | classic | 125, 500, 1000 | 30000 | ❓ | — | nobody yet (shares the dongle row's config file) |
 | Basilisk V2 (wired) | 0x0085 | 0x1f | classic `00/05` | 125, 500, 1000 | 20000 | — | — | the author |
 | Basilisk V3 Pro, wired / wireless | 0x00AA / 0x00AB | 0x1f | classic | 125, 500, 1000 | 30000 | ❓ | — | nobody yet |
 | Any other Razer mouse (vendor 0x1532, 90-byte control report) | — | 0x1f | classic | 125, 500, 1000 | 30000 | — | — | read-only; `freenapse probe` |
@@ -70,7 +71,7 @@ write to it at their own risk.
 The wired probe and write/read-back report are in [issue #2](https://github.com/MatthewSaintBull/freenapse/issues/2).
 
 **Basilisk V2.** Probed and written on the author's mouse (firmware 1.3). Its
-13 buttons are in `BASILISK_V2_BUTTONS`: the Viper's seven plus DPI up `0x0b`,
+13 buttons are in `BASILISK_V2_BUTTONS`: the seven clicks plus DPI up `0x0b`,
 DPI down `0x0c`, wheel tilt left `0x34` and right `0x35`, the sensitivity
 clutch `0x0f` and the profile button `0x0e`. The defaults are what an
 untouched layer reports (tilts: scroll repeated every 20 ms; clutch: 788 DPI
@@ -87,6 +88,21 @@ unverified. Both rows require `[device] allow_unverified = true` for writes;
 re-import preserves the choice. The shipped 8000 Hz in-game setting stays valid
 on a wired Viper V3 Pro but fails if a classic-polling mouse switches to it.
 
+**Pro Click V2 Vertical.** Verified by its owner through the HyperSpeed
+dongle in [issue #4](https://github.com/MatthewSaintBull/freenapse/issues/4):
+import, apply, status, DPI, idle sleep and the low-battery threshold written
+and read back (firmware 1.0). Classic polling only (HyperPolling answers
+unsupported), one onboard profile, no macro memory (the tray plays macros),
+angle and Dynamic Sensitivity refused. The probe found the eight buttons of
+the common layout, the DPI button `0x60` (on top of this mouse) included. It
+keeps its settings in
+`config-pro-click-v2-vertical.toml`, over the dongle and over the cable
+(product id 0x00C7 per OpenRazer, listed unverified until a probe over the
+cable confirms it). With the dongle still plugged in while the mouse is on
+its cable, the dongle's interface answers every mouse command with a
+timeout; freenapse opens the listed interface whose mouse answers, so the
+cable wins in that case.
+
 ## Feature map
 
 Legend: ✅ replicated, 🟡 partially / different approach, ❌ not replicated.
@@ -96,7 +112,7 @@ Status at a glance and the release roadmap: [ROADMAP.md](ROADMAP.md).
 
 | Synapse feature | Where it lives | freenapse | Command |
 |---|---|---|---|
-| Sensitivity stages (up to 5), active stage | onboard | ✅ verified read | `0x04/0x06` set stages, `0x04/0x86` get (VARSTORE, 7 bytes per stage) |
+| Sensitivity stages (up to 5), active stage | onboard | ✅ verified read. The stage picked with the DPI button is kept: apply writes `dpi.active` only with a changed stage list, and the Performance page re-reads the stage every 2 s while the mouse is in use (the mouse sends no notification) | `0x04/0x06` set stages, `0x04/0x86` get (VARSTORE, 7 bytes per stage) |
 | Live DPI X/Y, 100..35000 in 1 DPI steps | onboard | ✅ | `0x04/0x05` / `0x04/0x85` |
 | Independent X/Y sensitivity | onboard | ✅ CLI `dpi x y`, config `dpi.y_stages`, window toggle | same |
 | Polling rate 125..8000 Hz | onboard | ✅ verified read (1000 Hz) | `0x00/0x40` set (sent twice, arg 0x00 then 0x01), `0x00/0xC0` get. Codes 8000=0x01 4000=0x02 2000=0x04 1000=0x08 500=0x10 250=0x20 125=0x40 |

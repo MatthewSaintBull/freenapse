@@ -1,5 +1,55 @@
 # Changelog
 
+## 0.4.3 (unreleased)
+
+- The Razer Pro Click V2 Vertical through its HyperSpeed dongle (product id
+  0x00C8) is verified: its owner confirmed import, apply, status, DPI, idle
+  sleep and the low-battery threshold with `allow_unverified` (issue 4), so
+  freenapse now writes to it without the flag. Like the Basilisk V2 it keeps
+  its settings in its own file, `config-pro-click-v2-vertical.toml`, made from
+  the mouse's own settings the first time.
+- The DPI button is in Customize. Both the Viper V3 Pro (underneath) and the
+  Pro Click V2 Vertical (on top) have it at button code 0x60, cycling the DPI
+  stages out of the box; freenapse did not list it, so it could not be read or
+  remapped. The common layout has eight buttons now, the probe names the code,
+  and the function it ships with is `dpi-cycle` ("Cycle stages" in the DPI
+  category), which can be put on any button. A mouse that answers "no such
+  button" for a code of its row's layout is skipped on apply instead of
+  failing, unless the config binds that button.
+- The stage picked with the DPI button is kept and shown. The mouse does
+  not announce the change, and the window only showed the config's `active`
+  stage; worse, every apply (tray start, config reload, pending changes)
+  put the config's stage back, and a game profile going away did the same.
+  Now apply writes `active` only together with a changed stage list, a game
+  profile restores the stage the mouse was on before it, and the window
+  reads the active stage when the mouse answers and, on the Performance
+  page, every 2 s while the mouse is in use (awake, so no battery cost;
+  nothing is asked of a sleeping mouse). The tray menu already read it.
+- The Pro Click V2 Vertical over its cable (product id 0x00C7, from
+  OpenRazer) is listed, unverified, with the same config file as the dongle
+  row, so a probe over the cable can confirm it.
+- With several listed Razer interfaces present, freenapse opens the one
+  whose mouse answers. A HyperSpeed dongle left in while its mouse runs on
+  the cable (or is switched off) answers every mouse command with a timeout,
+  and freenapse used to pick it when it came first, so every command, and
+  the probe, hung for about a second per exchange (issue 4). A single
+  interface is opened as before, without the extra read. Checked on a Viper
+  V3 Pro with its cable and dongle both plugged in: the dongle times out,
+  the cable answers and is the one used. The settings window drops its
+  handle after a timeout as well, so it moves to the cable (or back to the
+  dongle) on its next read instead of showing the mouse asleep, and once
+  the mouse is gone it looks for it every 3 s while you are at the PC
+  instead of at the next 30 s battery read. The
+  sidebar's battery label ("56% charging") no longer runs under the bar:
+  the label takes the width it needs and the bar the rest.
+- The winget manifests under `packaging/` are gone: the package was never
+  submitted, so `winget install MatteoSantoro.freenapse` never worked.
+  Scoop stays the one alternative to the download.
+- `freenapse probe` prints each line as the answer arrives instead of
+  everything at the end, lists the other Razer control interfaces present
+  (by product id), and stops after the firmware reads when no transaction
+  id answers, instead of timing out through some 160 more exchanges.
+
 ## 0.4.2 (2026-11-07)
 
 - Fix: started at login, the tray app could run without its icon. Right
@@ -85,9 +135,9 @@
   when it is newer, says so once and adds "Update to freenapse x.y.z..." to
   its menu. One GET to api.github.com, nothing about you in it;
   `[tray] check_updates = false` turns it off.
-- Packaging: winget manifests (`MatteoSantoro.freenapse`, portable) and a
-  Scoop manifest in `packaging/`, both ways around the SmartScreen prompt an
-  unsigned download gets.
+- Packaging: a Scoop manifest in `packaging/`, a way around the SmartScreen
+  prompt an unsigned download gets. (winget manifests were drafted here too
+  but never submitted; they were removed in 0.4.3.)
 - CI runs rustfmt and clippy (`-D warnings`); `tests/golden.rs` freezes the
   exact bytes of every command builder.
 - Experimental support for the wired DeathAdder V3 Pro (product id 0x00B6),

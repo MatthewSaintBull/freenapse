@@ -396,9 +396,12 @@ fn run(cmd: &str, args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
         "probe" => {
             let show_serials = args.iter().any(|a| a == "--serials");
             eprintln!("probing: about half a minute, keep the mouse awake (move it now and then)");
-            for line in freenapse::probe::run(&mouse, show_serials) {
+            // Line by line as the answers come in, so a stalled probe shows where it stands.
+            freenapse::probe::run_with(&mouse, show_serials, &mut |line| {
+                use std::io::Write;
                 println!("{line}");
-            }
+                let _ = std::io::stdout().flush();
+            });
         }
         "watch" => {
             let n: u32 = args.first().map(|s| s.parse()).transpose()?.unwrap_or(30);

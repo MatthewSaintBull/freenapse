@@ -73,7 +73,7 @@ macro_rules! spec {
         spec!($pid, $name, wireless $w, tid $tid, $style, $rates, dpi $dpi, sensor $s, pairing $p, verified $v, acceleration true, rotation true)
     };
     ($pid:expr, $name:expr, wireless $w:expr, tid $tid:expr, $style:ident, $rates:expr, dpi $dpi:expr, sensor $s:expr, pairing $p:expr, verified $v:expr, acceleration $a:expr, rotation $r:expr) => {
-        spec!($pid, $name, wireless $w, tid $tid, $style, $rates, dpi $dpi, sensor $s, pairing $p, verified $v, acceleration $a, rotation $r, buttons VIPER_BUTTONS)
+        spec!($pid, $name, wireless $w, tid $tid, $style, $rates, dpi $dpi, sensor $s, pairing $p, verified $v, acceleration $a, rotation $r, buttons BUTTONS)
     };
     ($pid:expr, $name:expr, wireless $w:expr, tid $tid:expr, $style:ident, $rates:expr, dpi $dpi:expr, sensor $s:expr, pairing $p:expr, verified $v:expr, acceleration $a:expr, rotation $r:expr, buttons $b:expr) => {
         DeviceSpec {
@@ -118,7 +118,16 @@ pub const DEVICES: &[DeviceSpec] = &[
     spec!(0x0091, "Razer Viper 8KHz", wireless false, tid 0xff, HyperPolling, RATES_VIPER_8K, dpi 20000, sensor false, pairing false, verified false),
     spec!(0x00AF, "Razer Cobra Pro (wired)", wireless false, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified false),
     spec!(0x00B0, "Razer Cobra Pro (wireless)", wireless true, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified false),
-    spec!(0x00C8, "Razer Pro Click V2 Vertical (wireless)", wireless true, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified false, acceleration false, rotation false),
+    // The same mouse over its cable (product id from OpenRazer, no probe yet): the same config file.
+    DeviceSpec {
+        config: Some("pro-click-v2-vertical"),
+        ..spec!(0x00C7, "Razer Pro Click V2 Vertical (wired)", wireless false, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified false, acceleration false, rotation false)
+    },
+    // Verified by its owner over the HyperSpeed dongle (issue 4); its own config file.
+    DeviceSpec {
+        config: Some("pro-click-v2-vertical"),
+        ..spec!(0x00C8, "Razer Pro Click V2 Vertical (wireless)", wireless true, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified true, acceleration false, rotation false)
+    },
     // Wired only: no battery, so no idle sleep or low-battery mode either.
     DeviceSpec {
         battery: false,
@@ -160,7 +169,7 @@ impl DeviceSpec {
             config: None,
             pairing: false,
             verified: false,
-            buttons: VIPER_BUTTONS,
+            buttons: BUTTONS,
         }
     }
 
@@ -291,7 +300,8 @@ impl ButtonFunction {
         let b = usage.to_be_bytes();
         ButtonFunction([0x0a, 2, b[0], b[1], 0, 0, 0])
     }
-    /// 0x01 = next stage, 0x02 = previous (both wrap), 0x03 + level = jump to a stage.
+    /// 0x01 = next stage, 0x02 = previous (both wrap), 0x03 + level = jump to a stage,
+    /// 0x06 = cycle through the stages (what the DPI button does out of the box).
     pub fn dpi_cycle_up() -> Self {
         ButtonFunction([0x06, 1, 0x01, 0, 0, 0, 0])
     }
@@ -300,6 +310,9 @@ impl ButtonFunction {
     }
     pub fn dpi_stage(level: u8) -> Self {
         ButtonFunction([0x06, 2, 0x03, level, 0, 0, 0])
+    }
+    pub fn dpi_cycle() -> Self {
+        ButtonFunction([0x06, 1, 0x06, 0, 0, 0, 0])
     }
     /// 0x01 next, 0x02 previous, 0x03 + id, 0x04 cycle up, 0x05 cycle down.
     /// Sensitivity clutch: this DPI while the button is held.
@@ -399,6 +412,7 @@ impl ButtonFunction {
                 0x01 => "DPI cycle up".into(),
                 0x02 => "DPI cycle down".into(),
                 0x03 => format!("DPI stage {}", d[3]),
+                0x06 => "DPI cycle".into(),
                 0x05 => format!("sensitivity clutch {}x{} DPI", u16::from_be_bytes([d[3], d[4]]), u16::from_be_bytes([d[5], d[6]])),
                 x => format!("DPI op 0x{x:02x}"),
             },
@@ -444,12 +458,13 @@ pub fn mouse_button_name(code: u8) -> &'static str {
     }
 }
 
-/// Physical buttons of the Viper V3 Pro as addressed by the button-mapping command.
-pub const BUTTONS: [(&str, u8); 7] =
+/// The clicks a button function can emit (class 0x01), by config name: the
+/// same codes on every Razer mouse.
+pub const CLICK_CODES: [(&str, u8); 7] =
     [("left", 0x01), ("right", 0x02), ("middle", 0x03), ("back", 0x04), ("forward", 0x05), ("scroll-up", 0x09), ("scroll-down", 0x0a)];
 
 pub fn button_code(name: &str) -> Option<u8> {
-    BUTTONS.iter().find(|(n, _)| *n == name).map(|(_, c)| *c)
+    CLICK_CODES.iter().find(|(n, _)| *n == name).map(|(_, c)| *c)
 }
 
 /// One physical button of a mouse: its config name, the code the
@@ -465,8 +480,10 @@ const fn clicks(name: &'static str, code: u8) -> PhysicalButton {
     PhysicalButton { name, code, default: ButtonFunction([0x01, 1, code, 0, 0, 0, 0]) }
 }
 
-/// The seven buttons of the Viper V3 Pro, and of every row that lists no others.
-pub const VIPER_BUTTONS: &[PhysicalButton] = &[
+/// The buttons a Razer mouse has unless its row lists others: the five
+/// clicks, the wheel, and the DPI button at 0x60 (under the Viper V3 Pro,
+/// on top of the Pro Click V2 Vertical), which cycles the stages out of the box.
+pub const BUTTONS: &[PhysicalButton] = &[
     clicks("left", 0x01),
     clicks("right", 0x02),
     clicks("middle", 0x03),
@@ -474,9 +491,10 @@ pub const VIPER_BUTTONS: &[PhysicalButton] = &[
     clicks("forward", 0x05),
     clicks("scroll-up", 0x09),
     clicks("scroll-down", 0x0a),
+    PhysicalButton { name: "dpi", code: 0x60, default: ButtonFunction([0x06, 1, 0x06, 0, 0, 0, 0]) },
 ];
 
-/// The Basilisk V2: the seven above plus DPI up and down behind the wheel,
+/// The Basilisk V2: the seven clicks above (no 0x60) plus DPI up and down behind the wheel,
 /// the wheel tilts, the sensitivity clutch and the profile button underneath.
 /// Defaults are what the mouse reports on a layer nobody has changed.
 pub const BASILISK_V2_BUTTONS: &[PhysicalButton] = &[
@@ -497,11 +515,17 @@ pub const BASILISK_V2_BUTTONS: &[PhysicalButton] = &[
     PhysicalButton { name: "profile", code: 0x0e, default: ButtonFunction([0x07, 1, 0x04, 0, 0, 0, 0]) },
 ];
 
-const BUTTON_LISTS: [&[PhysicalButton]; 2] = [VIPER_BUTTONS, BASILISK_V2_BUTTONS];
+const BUTTON_LISTS: [&[PhysicalButton]; 2] = [BUTTONS, BASILISK_V2_BUTTONS];
 
 /// A physical button by config name, on any mouse in the table.
 pub fn physical_button(name: &str) -> Option<&'static PhysicalButton> {
     BUTTON_LISTS.iter().flat_map(|l| l.iter()).find(|b| b.name == name)
+}
+
+/// The config name of a button code, on any mouse in the table (a name means
+/// the same code everywhere, see the tests).
+pub fn button_name(code: u8) -> Option<&'static str> {
+    BUTTON_LISTS.iter().flat_map(|l| l.iter()).find(|b| b.code == code).map(|b| b.name)
 }
 
 pub struct Mouse {
@@ -528,17 +552,31 @@ impl Mouse {
 
     pub fn open_with(allow_unverified: bool) -> Result<Mouse> {
         let known: Vec<u16> = DEVICES.iter().map(|d| d.product_id).collect();
-        let hid = match HidDevice::open_control(VENDOR_RAZER, &known) {
-            Ok(h) => h,
-            Err(HidError::NotFound) => HidDevice::open_control_any(VENDOR_RAZER, |info| {
-                // Not a keyboard's control collection (usage page 1, usage 6).
-                info.feature_report_len as usize >= HID_BUF_LEN && !(info.usage_page == 1 && info.usage == 6)
-            })?,
-            Err(e) => return Err(e),
+        let mut candidates: Vec<Mouse> = HidDevice::open_controls(VENDOR_RAZER, &known).into_iter().map(|hid| Mouse::from_hid(hid, allow_unverified)).collect();
+        let mouse = match candidates.len() {
+            0 => {
+                let hid = HidDevice::open_control_any(VENDOR_RAZER, |info| {
+                    // Not a keyboard's control collection (usage page 1, usage 6).
+                    info.feature_report_len as usize >= HID_BUF_LEN && !(info.usage_page == 1 && info.usage == 6)
+                })?;
+                Mouse::from_hid(hid, allow_unverified)
+            }
+            1 => candidates.remove(0),
+            // Several listed interfaces: a dongle whose mouse is on its cable (or switched
+            // off) sits next to the one that answers. Take the first that does; when none
+            // does (mouse asleep), the first listed, as before.
+            _ => match candidates.iter().position(|m| m.firmware().is_ok()) {
+                Some(i) => candidates.swap_remove(i),
+                None => candidates.remove(0),
+            },
         };
+        crate::set_mouse_config(mouse.spec.config);
+        Ok(mouse)
+    }
+
+    fn from_hid(hid: HidDevice, allow_unverified: bool) -> Mouse {
         let spec = DeviceSpec::lookup(hid.info.product_id);
-        crate::set_mouse_config(spec.config);
-        Ok(Mouse { hid, spec, allow_unverified, profile: std::cell::Cell::new(1), macro_support: std::cell::Cell::new(None) })
+        Mouse { hid, spec, allow_unverified, profile: std::cell::Cell::new(1), macro_support: std::cell::Cell::new(None) }
     }
 
     /// What the table says about this mouse.
@@ -1117,19 +1155,29 @@ mod tests {
                 assert_eq!(physical_button(b.name).map(|p| p.code), Some(b.code), "{}", b.name);
             }
         }
-        assert_eq!(&BASILISK_V2_BUTTONS[..7], VIPER_BUTTONS, "the art and the config expect the seven first");
+        assert_eq!(&BASILISK_V2_BUTTONS[..7], &BUTTONS[..7], "the art and the config expect the seven clicks first");
+        assert_eq!(BUTTONS[7], PhysicalButton { name: "dpi", code: 0x60, default: ButtonFunction::dpi_cycle() });
+        assert_eq!(button_name(0x60), Some("dpi"));
+        assert_eq!(button_name(0x0b), Some("dpi-up"));
+        assert_eq!(button_name(0x61), None);
+        assert_eq!(ButtonFunction::dpi_cycle().describe(), "DPI cycle");
         // The Viper keeps config.toml; the Basilisk V2 has its own file and no battery.
         let b = DeviceSpec::find(0x0085).unwrap();
         assert!(b.verified && !b.battery && b.lighting.len() == 2);
         assert_eq!(crate::config_file_name(b.config), "config-basilisk-v2.toml");
+        assert_eq!(crate::config_file_name(DeviceSpec::find(0x00C8).unwrap().config), "config-pro-click-v2-vertical.toml");
+        // Wired and wireless Pro Click are one mouse: one config file, the wired row still unverified.
+        let pc_wired = DeviceSpec::find(0x00C7).unwrap();
+        assert!(!pc_wired.wireless && !pc_wired.verified && pc_wired.battery);
+        assert_eq!(pc_wired.config, DeviceSpec::find(0x00C8).unwrap().config);
         assert_eq!(crate::config_file_name(DeviceSpec::viper_v3_pro().config), "config.toml");
         assert_eq!(crate::config_file_name(DeviceSpec::find(0x00C0).unwrap().config), "config.toml");
         for (i, d) in DEVICES.iter().enumerate() {
             assert!(!d.polling_rates.is_empty(), "{}", d.name);
             assert!(DEVICES[..i].iter().all(|o| o.product_id != d.product_id), "duplicate 0x{:04x}", d.product_id);
         }
-        // The author's Viper V3 Pro (wired and wireless) and Basilisk V2.
-        assert_eq!(DEVICES.iter().filter(|d| d.verified).count(), 3);
+        // The author's Viper V3 Pro (wired and wireless) and Basilisk V2, and the Pro Click V2 Vertical (issue 4).
+        assert_eq!(DEVICES.iter().filter(|d| d.verified).count(), 4);
     }
 
     #[test]

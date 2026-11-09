@@ -21,7 +21,7 @@ use std::ffi::c_void;
 use std::mem;
 use std::ptr;
 use std::sync::mpsc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use windows_sys::Win32::Foundation::*;
 use windows_sys::Win32::Graphics::Dwm::{DWMWA_CAPTION_COLOR, DWMWA_USE_IMMERSIVE_DARK_MODE, DwmSetWindowAttribute};
@@ -34,7 +34,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
 use crate::accel;
 use crate::config::{Config, GameConfig, MacroConfig, macro_spec, parse_button};
-use crate::device::{Battery, DeviceSpec, MacroStorage, Mouse, PairedDevice, PhysicalButton};
+use crate::device::{Battery, DeviceSpec, DpiStages, MacroStorage, Mouse, PairedDevice, PhysicalButton};
 use crate::hid::HidError;
 use crate::library::{self, Game};
 use crate::macros::{self, Playback};
@@ -82,10 +82,15 @@ impl Dev {
         Ok(self.mouse.as_ref().unwrap())
     }
 
-    /// Drop the handle after an error that means the device went away.
+    /// Drop the handle after an error that means the device went away, and after
+    /// a timeout too: the mouse may have moved to its cable while this handle is
+    /// the dongle's, and the next open picks the interface that answers. A
+    /// sleeping mouse reopens as well, which costs one enumeration.
     fn check<T>(&mut self, r: &Result<T, HidError>) {
-        if matches!(r, Err(HidError::Win32(..)) | Err(HidError::NotFound)) {
-            self.mouse = None;
+        if let Err(e) = r {
+            if is_gone(e) || is_asleep_error(e) {
+                self.mouse = None;
+            }
         }
     }
 
@@ -508,6 +513,10 @@ pub struct Ui {
     /// What the device table says about the open mouse (the Viper V3 Pro until one is open).
     pub(crate) spec: DeviceSpec,
     pub(crate) asleep: bool,
+    /// When the active DPI stage was last read from the mouse (the DPI button changes it).
+    stage_read: Option<Instant>,
+    /// When `read_live` last started, to look again soon after the mouse went away.
+    live_read: Option<Instant>,
     widgets: Vec<Widget>,
     edits: Vec<EditCtl>,
     hot: Option<usize>,
@@ -666,6 +675,8 @@ unsafe fn create(owner: HWND) -> HWND {
         io_busy: 0,
         reading: false,
         retrying: false,
+        stage_read: None,
+        live_read: None,
         connected: false,
         battery: None,
         fw: None,
@@ -1005,6 +1016,7 @@ impl Ui {
             return;
         }
         self.reading = true;
+        self.live_read = Some(Instant::now());
         let want_ident = full || self.fw.is_none();
         let want_pair = full || self.paired.is_none();
         // Battery first, so the header updates after one exchange; identity and pairing follow.
@@ -1012,10 +1024,15 @@ impl Ui {
             let res = dev.mouse().and_then(|m| m.battery());
             dev.check(&res);
             let spec = dev.mouse.as_ref().map(|m| m.spec().clone());
+            // The mouse answered: its active DPI stage may have moved with the DPI button.
+            let stages = if res.is_ok() { dev.mouse().ok().and_then(|m| m.dpi_stages().ok()) } else { None };
             Box::new(move |ui: &mut Ui| {
                 if let Some(spec) = spec {
                     ui.wireless = spec.wireless;
                     ui.spec = spec;
+                }
+                if let Some(st) = stages {
+                    ui.take_stage(st);
                 }
                 let awake = res.is_ok();
                 match res {
@@ -1041,6 +1058,37 @@ impl Ui {
                 ui.repaint();
             })
         });
+    }
+
+    /// Ask the mouse which DPI stage is active (one exchange, on the I/O thread).
+    fn read_stage(&mut self) {
+        self.stage_read = Some(Instant::now());
+        self.io(|dev| {
+            let st = dev.mouse().and_then(|m| m.dpi_stages());
+            // A failed read drops a handle whose device is gone (cable pulled) or quiet.
+            dev.check(&st);
+            Box::new(move |ui: &mut Ui| {
+                if let Ok(st) = st {
+                    ui.take_stage(st);
+                }
+            })
+        });
+    }
+
+    /// The mouse's stages as just read: when they are the config's, its active
+    /// stage is the one to show (the DPI button may have moved it). The file is
+    /// not rewritten for that; the next save carries it. A list that differs
+    /// from the config's is a pending apply, which selects the config's stage.
+    fn take_stage(&mut self, st: DpiStages) {
+        self.stage_read = Some(Instant::now());
+        if st.stages != self.cfg.stage_pairs() || st.active == self.cfg.dpi.active {
+            return;
+        }
+        if (1..=self.cfg.dpi.stages.len() as u8).contains(&st.active) {
+            self.cfg.dpi.active = st.active;
+            unsafe { self.layout() };
+            self.repaint();
+        }
     }
 
     /// Firmware, serial, profiles, macro memory and the dongle's pairings.
@@ -1110,6 +1158,19 @@ impl Ui {
         let mut repaint = false;
         if self.pending && user_active() {
             self.retry_pending();
+        }
+        // The DPI button changes the stage on the mouse without telling anyone: while the
+        // Performance page is up and the mouse is in use (so awake, its radio already busy),
+        // one read every 2 s keeps the page honest. Nothing is asked of a sleeping mouse.
+        let stale = self.stage_read.is_none_or(|t| t.elapsed() >= Duration::from_secs(2));
+        if self.page == Page::Performance && stale && !self.pending && self.io_busy == 0 && self.connected && user_active() {
+            self.read_stage();
+        }
+        // The mouse went away (cable pulled while the dongle stays, or the other way round):
+        // look for it again every 3 s rather than at the next 30 s battery read.
+        let quiet = self.live_read.is_none_or(|t| t.elapsed() >= Duration::from_secs(3));
+        if !self.connected && quiet && !self.reading && self.io_busy == 0 && user_active() {
+            self.read_live(false);
         }
         if let Some(since) = self.pairing_since {
             if since.elapsed().as_secs() >= PAIRING_SECS {
@@ -1466,7 +1527,8 @@ impl Ui {
             None => (DIM, 0, "--".to_string()),
         };
         let _ = online;
-        let lw = s(72);
+        // The label takes what it needs ("54% charging" is wider than "54%"); the bar gets the rest.
+        let lw = (text_width(dc, self.fonts.caps, &label) + s(10)).max(s(72));
         let by = cr.bottom - s(22);
         let bar = rect(cr.left + s(16), by, cr.right - cr.left - s(32) - lw, s(4));
         round(dc, &bar, s(2), Some(TRACK), None);
@@ -3299,7 +3361,8 @@ impl Ui {
             let key = format!("hypershift.{}", b.name);
             let f = cfg.buttons.get(&key).and_then(|s| parse_button(s).ok().flatten()).unwrap_or(b.default);
             let f = apply::resolve(m, cfg, f)?;
-            if m.button(m.profile(), b.code, true)? != f {
+            let Some(current) = apply::current_button(m, b.code, b.name, true, cfg.buttons.contains_key(&key))? else { continue };
+            if current != f {
                 m.set_button(m.profile(), b.code, true, f)?;
             }
         }

@@ -10,7 +10,7 @@ use super::draw::*;
 use super::{FontKind, Id, Kind, Layer, Page, TileArt, TileItem, Ui, Widget};
 use crate::accel::Mode;
 use crate::config::{MacroConfig, parse_button};
-use crate::device::{BUTTONS, DeviceSpec, TURBO_MAX, TURBO_MIN};
+use crate::device::{CLICK_CODES, DeviceSpec, TURBO_MAX, TURBO_MIN};
 use crate::macros::{self, Playback};
 
 /// Card padding, the label column of a settings row, and the row heights (DESIGN.md 3.3, 4.6).
@@ -993,7 +993,7 @@ pub fn with_turbo(base: &str, rate: Option<u8>) -> String {
 pub fn options_for(cat: usize, stages: usize) -> Vec<(String, String)> {
     match cat {
         CAT_MOUSE => {
-            let mut v: Vec<(String, String)> = BUTTONS.iter().map(|(n, _)| (pretty_button(n), format!("mouse:{n}"))).collect();
+            let mut v: Vec<(String, String)> = CLICK_CODES.iter().map(|(n, _)| (pretty_button(n), format!("mouse:{n}"))).collect();
             v.push(("Double click".to_string(), "double-click".to_string()));
             v
         }
@@ -1005,7 +1005,11 @@ pub fn options_for(cat: usize, stages: usize) -> Vec<(String, String)> {
             v
         }
         3 => {
-            let mut v = vec![("Cycle up".to_string(), "dpi-up".to_string()), ("Cycle down".to_string(), "dpi-down".to_string())];
+            let mut v = vec![
+                ("Cycle stages".to_string(), "dpi-cycle".to_string()),
+                ("Cycle up".to_string(), "dpi-up".to_string()),
+                ("Cycle down".to_string(), "dpi-down".to_string()),
+            ];
             for i in 1..=stages.clamp(1, 5) {
                 v.push((format!("Stage {i}"), format!("dpi-stage:{i}")));
             }
@@ -1038,6 +1042,7 @@ fn pretty_button(name: &str) -> String {
         "forward" => "Forward",
         "scroll-up" => "Scroll up",
         "scroll-down" => "Scroll down",
+        "dpi" => "DPI button",
         "dpi-up" => "DPI up",
         "dpi-down" => "DPI down",
         "tilt-left" => "Wheel tilt left",
@@ -1080,6 +1085,7 @@ pub fn pretty_spec(spec: Option<&str>, own: &str, macros_: &[MacroConfig]) -> St
         Some("system:sleep") => "Sleep".into(),
         Some("system:power") => "Power".into(),
         Some("system:wake") => "Wake".into(),
+        Some("dpi-cycle") => "DPI cycle".into(),
         Some("dpi-up") => "DPI cycle up".into(),
         Some("dpi-down") => "DPI cycle down".into(),
         Some(s) if s.starts_with("dpi-stage:") => format!("DPI stage {}", &s[10..]),
@@ -1567,7 +1573,11 @@ fn roadmap(f: &mut Form) {
     f.status(Done, "Game library", "Steam, Epic, GOG, EA app, Battle.net, Riot, Ubisoft, Rockstar, Xbox; any other program by file dialog");
     f.status(Done, "Dongle pairing", "pair, cancel, unpair and auto-pairing from the gear page and the CLI");
     f.status(Todo, "Bluetooth", "the Viper V3 Pro has no Bluetooth; kept for other mice");
-    f.status(Partial, "Other Razer mice", "Basilisk V2 verified, DeathAdder V3 Pro being tested, the rest read-only: see the Devices page");
+    f.status(
+        Partial,
+        "Other Razer mice",
+        "Basilisk V2 and Pro Click V2 Vertical verified, DeathAdder V3 Pro being tested, the rest read-only: see the Devices page",
+    );
     f.status(Never, "Firmware update", "use Razer's updater once if you need it");
     f.status(Partial, "Chroma lighting", "off, static, breathing and spectrum per zone on mice with LEDs (Basilisk V2); no wave or per-key frames");
     f.status(Never, "Account, cloud", "telemetry too; by design");
@@ -1634,9 +1644,11 @@ fn mouse_regions(f: &Form, x: i32, y: i32, w: i32, h: i32, buttons: &[crate::dev
     v
 }
 
-/// Where the buttons beyond the Viper's seven sit on the drawing, in unscaled
-/// coordinates: DPI up and down behind the wheel, the tilts on either side
-/// of it, the clutch on the side below the side buttons.
+/// Where the buttons beyond the seven clicks sit on the drawing, in unscaled
+/// coordinates: the DPI button (or the Basilisk's DPI up and down) behind the
+/// wheel, the tilts on either side of it, the clutch on the side below the
+/// side buttons. The Viper's DPI button is really underneath; the drawing
+/// puts it where a hand would look for it.
 /// (x, y, w, h)
 type Area = (i32, i32, i32, i32);
 
@@ -1650,6 +1662,7 @@ fn extra_shapes(g: &MouseGeom) -> Vec<(&'static str, Area)> {
     vec![
         ("tilt-left", (g.cx - wheel_w / 2 - 14, wheel_y + wheel_h / 4, 10, wheel_h / 2)),
         ("tilt-right", (g.cx + wheel_w / 2 + 4, wheel_y + wheel_h / 4, 10, wheel_h / 2)),
+        ("dpi", (g.cx - dpi_w / 2, g.top + g.h * 32 / 100, dpi_w, dpi_h)),
         ("dpi-up", (g.cx - dpi_w / 2, g.top + g.h * 32 / 100, dpi_w, dpi_h)),
         ("dpi-down", (g.cx - dpi_w / 2, g.top + g.h * 37 / 100, dpi_w, dpi_h)),
         ("clutch", (l - 12, g.top + g.h * 62 / 100, 16, g.h * 8 / 100)),

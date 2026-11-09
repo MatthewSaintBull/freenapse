@@ -4,7 +4,23 @@
 use crate::config::{Config, button_target, parse_button, spec_for};
 use crate::device::{ButtonFunction, Mouse};
 use crate::hid::{HidError, Result};
+use crate::protocol::Status;
 use crate::sensor;
+
+/// The function a button has now, or None when the mouse has no such button:
+/// a layout shared by several rows may list one this unit lacks (the read
+/// answers status 03 or 05), and such a button is skipped unless the config
+/// binds it, which is an error worth seeing.
+pub fn current_button(mouse: &Mouse, code: u8, name: &str, hypershift: bool, bound: bool) -> Result<Option<ButtonFunction>> {
+    match mouse.button(mouse.profile(), code, hypershift) {
+        Ok(f) => Ok(Some(f)),
+        Err(HidError::Status(Status::Failure | Status::NotSupported)) if !bound => Ok(None),
+        Err(HidError::Status(Status::Failure | Status::NotSupported)) => {
+            Err(HidError::Invalid(format!("the config binds button {name}, which this mouse does not have")))
+        }
+        Err(e) => Err(e),
+    }
+}
 
 /// Build a config from what the mouse currently has stored, so the first run
 /// keeps the settings Synapse left behind instead of replacing them.
@@ -149,13 +165,18 @@ pub fn apply(mouse: &Mouse, cfg: &Config, polling_rate: u16) -> Result<Vec<Strin
         changes.push(format!("onboard profile -> {}", cfg.profile.active));
     }
 
+    // The stage picked with the mouse's DPI button is kept: the config's `active`
+    // is written along with a changed stage list, and when the user picks a stage
+    // in the window, the tray menu or `freenapse stages`. Otherwise the mouse's
+    // choice stands and only the live DPI is kept in line with it.
     let want_stages = cfg.stage_pairs();
     let cur = mouse.dpi_stages()?;
-    if cur.stages != want_stages || cur.active != cfg.dpi.active {
+    if cur.stages != want_stages {
         mouse.set_dpi_stages(cfg.dpi.active, &want_stages)?;
         changes.push(format!("dpi stages -> {:?} (active {})", cfg.dpi.stages, cfg.dpi.active));
     } else {
-        let want = want_stages[cfg.dpi.active as usize - 1];
+        let active = cur.active.clamp(1, want_stages.len() as u8);
+        let want = want_stages[active as usize - 1];
         if mouse.dpi()? != want {
             mouse.set_dpi(want.0, want.1)?;
             changes.push(format!("dpi -> {}", want.0));
@@ -231,7 +252,8 @@ pub fn apply(mouse: &Mouse, cfg: &Config, polling_rate: u16) -> Result<Vec<Strin
                 Some(Ok(Some(f))) => cfg.resolve_button(f, onboard),
                 _ => b.default,
             };
-            if mouse.button(mouse.profile(), code, hs)? != func {
+            let Some(current) = current_button(mouse, code, name, hs, spec.is_some())? else { continue };
+            if current != func {
                 mouse.set_button(mouse.profile(), code, hs, func)?;
                 changes.push(format!("button {key} -> {}", spec.map(String::as_str).unwrap_or("default")));
             }
@@ -303,7 +325,8 @@ pub fn apply_game_buttons(mouse: &Mouse, cfg: &Config, game: Option<&crate::conf
             Some(Ok(Some(f))) => cfg.resolve_button(f, onboard),
             _ => b.default,
         };
-        if mouse.button(mouse.profile(), b.code, false)? != func {
+        let Some(current) = current_button(mouse, b.code, b.name, false, spec.is_some())? else { continue };
+        if current != func {
             mouse.set_button(mouse.profile(), b.code, false, func)?;
             written = true;
         }

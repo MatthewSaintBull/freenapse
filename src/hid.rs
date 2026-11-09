@@ -173,14 +173,34 @@ impl HidDevice {
     /// Find the Razer control collection (the one exposing a 91-byte feature report)
     /// for any of the given product ids.
     pub fn open_control(vendor_id: u16, product_ids: &[u16]) -> Result<HidDevice> {
+        HidDevice::open_controls(vendor_id, product_ids).into_iter().next().ok_or(HidError::NotFound)
+    }
+
+    /// Every control collection of this vendor whose product id is listed, in
+    /// enumeration order. A dongle and a cable of the same mouse, or two mice,
+    /// give one each; the caller finds out which one answers.
+    pub fn open_controls(vendor_id: u16, product_ids: &[u16]) -> Vec<HidDevice> {
         let needle = format!("vid_{vendor_id:04x}");
+        let mut out = Vec::new();
         for path in interface_paths(&needle) {
             let Ok(dev) = HidDevice::open_path(&path) else { continue };
             if product_ids.contains(&dev.info.product_id) && dev.info.feature_report_len as usize >= HID_BUF_LEN {
-                return Ok(dev);
+                out.push(dev);
             }
         }
-        Err(HidError::NotFound)
+        out
+    }
+
+    /// What this vendor has plugged in: one entry per control collection
+    /// (91-byte feature report), for the probe's report.
+    pub fn control_interfaces(vendor_id: u16) -> Vec<DeviceInfo> {
+        let needle = format!("vid_{vendor_id:04x}");
+        interface_paths(&needle)
+            .iter()
+            .filter_map(|p| HidDevice::open_path(p).ok())
+            .filter(|d| d.info.feature_report_len as usize >= HID_BUF_LEN)
+            .map(|d| d.info.clone())
+            .collect()
     }
 
     /// The first HID collection of this vendor that `accept` approves of, for
