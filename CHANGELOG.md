@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.4.3 (unreleased)
+## 0.4.3 (2026-11-09)
 
 - The Razer Pro Click V2 Vertical through its HyperSpeed dongle (product id
   0x00C8) is verified: its owner confirmed import, apply, status, DPI, idle
