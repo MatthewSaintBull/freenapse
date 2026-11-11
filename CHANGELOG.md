@@ -65,7 +65,7 @@
   sidebar's battery label ("56% charging") no longer runs under the bar:
   the label takes the width it needs and the bar the rest.
 - The winget manifests under `packaging/` are gone: the package was never
-  submitted, so `winget install MatteoSantoro.freenapse` never worked.
+  submitted, so installing it with winget never worked.
   Scoop stays the one alternative to the download.
 - `freenapse probe` prints each line as the answer arrives instead of
   everything at the end, lists the other Razer control interfaces present
