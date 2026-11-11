@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.4 (2026-11-11)
 
 - freenapse presents itself as what it is, a Synapse replacement for Razer
   mice with a device table, not a tool for one model: the README opens with
