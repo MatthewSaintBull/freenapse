@@ -1,4 +1,5 @@
-//! freenapse: a tiny replacement for Razer Synapse for the Razer Viper V3 Pro.
+//! freenapse: a tiny replacement for Razer Synapse for Razer mice. What it
+//! knows about each model is one row of the device table in [`device`].
 //!
 //! Layers:
 //! - [`protocol`]: Razer 90-byte report framing and command builders (pure, tested).
@@ -45,8 +46,8 @@ pub fn set_mouse_config(name: Option<&'static str>) {
     }
 }
 
-/// The file name of a mouse's config: `config.toml` for the Viper V3 Pro and
-/// every mouse whose row names no file of its own, `config-<name>.toml`
+/// The file name of a mouse's config: `config.toml` for every mouse whose
+/// row of the device table names no file of its own, `config-<name>.toml`
 /// otherwise, so two mice on one PC never share settings.
 pub fn config_file_name(name: Option<&str>) -> String {
     match name {

@@ -14,7 +14,7 @@ Legend: ✅ done and verified on the mouse, 🟡 partial, ❌ not yet, 🚫 out 
 | Feature | Status | Notes |
 |---|---|---|
 | DPI stages (up to 5), active stage | ✅ | CLI, config, settings window |
-| Live DPI 100..35000, 1 DPI steps | ✅ | |
+| Live DPI, 1 DPI steps | ✅ | from 100 up to the mouse's maximum (20000 to 45000 by model) |
 | Independent X/Y DPI | ✅ | CLI (`dpi x y`), config (`y_stages`), window toggle "Independent X and Y" |
 | Polling rate 125..8000 Hz | ✅ | 8000 needs the HyperPolling dongle |
 | In-game polling rate | ✅ | switches while a game with a profile owns the foreground window |
@@ -26,8 +26,8 @@ Legend: ✅ done and verified on the mouse, 🟡 partial, ❌ not yet, 🚫 out 
 
 | Feature | Status | Notes |
 |---|---|---|
-| Smart Tracking 1/2/3 mm | ✅ | verified on the mouse |
-| Asymmetric cut-off (lift-off 2..26, landing 1..25) | ✅ | written exactly as Synapse's engine for this mouse does (lift mode 4 + two level bytes), every step answers Success |
+| Smart Tracking 1/2/3 mm | ✅ | mice with the Focus Pro tracking page; verified on the Viper V3 Pro |
+| Asymmetric cut-off (lift-off 2..26, landing 1..25) | ✅ | same mice; written exactly as Synapse's engine does (lift mode 4 + two level bytes), every step answers Success |
 | Razer mouse-mat presets, custom surface calibration, mini calibration | 🚫 | Synapse loads the `orca5PlusCalibrationEngine` for the Viper V3 Pro, which has only Smart Tracking and the asymmetric cut-off; the surface-calibration commands of its other engines are refused by this firmware (tested wired, wireless, driver mode, with the left button held) |
 | Read back the current asymmetric levels | 🟡 | the configuration register does not return them, so `tracking = "keep"` leaves them untouched and `apply` always rewrites them |
 
@@ -45,11 +45,11 @@ Legend: ✅ done and verified on the mouse, 🟡 partial, ❌ not yet, 🚫 out 
 
 | Feature | Status | Notes |
 |---|---|---|
-| Button remapping, 7 buttons, normal + Hypershift layer | ✅ | onboard profile 1 |
+| Button remapping, every button of the mouse's layout, normal + Hypershift layer | ✅ | onboard; 8 buttons on the common layout, 13 on the Basilisk V2 |
 | Mouse functions, keyboard keys with modifiers, media keys, DPI stage / cycle, Hypershift, disabled | ✅ | |
 | Double-click, turbo (mouse button or key, with repeat rate), system keys sleep / power / wake | ✅ | config and window, verified read-back |
-| Profile switch button | 🚫 | the mouse reports a single onboard profile, so there is nothing to switch to |
-| Macros | ✅ | recorded in the window (keys, mouse buttons, wheel, delays) or written as steps in `[[macros]]`; five playback options. The Viper V3 Pro has no macro memory (every macro command answers "not supported" and Synapse's spec for it says `macros: false`), so, like Synapse, the tray app plays them: the button sends F13..F24 and the tray's keyboard hook turns it into the macro. Mice with macro memory get them stored onboard with Synapse's commands |
+| Profile switch button | 🟡 | the profile functions can be bound to any button; they only do something on a mouse that holds several onboard profiles |
+| Macros | ✅ | recorded in the window (keys, mouse buttons, wheel, delays) or written as steps in `[[macros]]`; five playback options. A mouse with macro memory (Basilisk V2) gets them stored onboard with Synapse's commands. One without (Viper V3 Pro, Pro Click V2 Vertical: every macro command answers "not supported") has them played by the tray app, like Synapse does: the button sends F13..F24 and the tray's keyboard hook turns it into the macro |
 | Software bindings (launch program, type text, Windows shortcuts) | ✅ | Program and Text functions on the Customize page, `launch:` / `text:` macro steps in the config; played by the tray app like software macros. Windows shortcuts are onboard keys (`key:win+d`) |
 
 ### App and device
@@ -61,14 +61,15 @@ Legend: ✅ done and verified on the mouse, 🟡 partial, ❌ not yet, 🚫 out 
 | Config file, import from the mouse, re-apply | ✅ | `%APPDATA%\freenapse\config.toml` |
 | Start at login | ✅ | registry Run key, toggle in the window's gear page |
 | Firmware versions and serial numbers | ✅ | mouse and dongle |
-| Onboard profile selection 1..5 | ✅ | `profile.active` in the config, `freenapse profile <n>` / `profiles`, selector on the gear page; buttons and Dynamic Sensitivity go to that profile. The Viper V3 Pro answers 1 to "max profiles supported" (`0x05/0x8a`) and refuses to create or activate others, so it accepts 1 only |
+| Onboard profile selection 1..5 | ✅ | `profile.active` in the config, `freenapse profile <n>` / `profiles`, selector on the gear page; buttons and Dynamic Sensitivity go to that profile. A mouse that answers 1 to "max profiles supported" (`0x05/0x8a`), like the Viper V3 Pro, refuses to create or activate others, so it accepts 1 only |
 | Per-game profile switching | ✅ | `[[games]]`: DPI stage, polling rate and button layout per game, switched by the tray app with the foreground window; GAMES tab, and a game layer on the Customize tab |
 | Game library | ✅ | installed games read from Steam, Epic Games, GOG, EA app, Battle.net, Riot, Ubisoft Connect, Rockstar and the Xbox app (local files and registry, no account); any other program through a file dialog |
 | Dongle pairing | ✅ | pair, cancel, unpair (confirmed twice) and auto-pairing on the gear page and in the CLI, Synapse's command bytes |
-| Bluetooth | 🚫 | the Viper V3 Pro has no Bluetooth |
-| Other Razer mice | 🟡 | a device table (`FEATURES.md`, "Supported mice"): other mice open read-only, `freenapse probe` collects what an issue needs, `[device] allow_unverified` lets an owner write at their own risk |
+| Bluetooth | ❌ | freenapse talks to the cable or the 2.4 GHz dongle |
+| Razer mice beyond the verified ones | 🟡 | a device table (`FEATURES.md`, "Supported mice") says what each model accepts: unverified mice open read-only, `freenapse probe` collects what an issue needs, `[device] allow_unverified` lets an owner write at their own risk |
 | Firmware update | 🚫 | use Razer's updater once if you need it |
-| Razer account, cloud profiles, telemetry, Chroma | 🚫 | by design; the Viper V3 Pro has no lighting |
+| Chroma lighting | 🟡 | off, static, breathing and spectrum per zone on mice with LEDs (Basilisk V2); no wave, reactive or per-key frames |
+| Razer account, cloud profiles, telemetry | 🚫 | by design |
 
 ## Roadmap
 
@@ -80,7 +81,7 @@ No dates. Each release ships when the items are verified on the mouse.
 * Per-game profiles: reuse the foreground-window detection from the in-game polling rate to switch DPI stages and button layouts.
 * Dongle pairing and unpairing from the gear page.
 
-All three are implemented. How each one turned out on the hardware:
+All three are implemented. How each one turned out on the Viper V3 Pro, the mouse that release was verified on:
 
 * Macros: the Viper V3 Pro has no macro memory (every macro command answers "not supported", Synapse's spec says `macros: false`), so the macro is played by the tray app, exactly as Synapse does for this mouse. "Record new macro" on the Customize tab captures keys, mouse buttons, wheel notches and delays; the binding gets one of the keys F13..F24 in the mouse and the tray's keyboard hook turns it into the macro, with Play once / N times / While held / Toggle / Sequence. Verified end to end: a macro bound to the Back button and applied to the mouse; a physical press of Back typed the macro's text. Mice with macro memory get the macro stored onboard with Synapse's commands (`freenapse macros`, `macro-read`, `macro-write`, `macro-delete`).
 * Per-game profiles: `[[games]]` entries with a DPI stage, a polling rate and a button layout per program; the Performance tab edits them, the Customize tab has a layer per game. Verified: with Notepad as the "game", two seconds after it took the foreground the mouse was at the game's polling rate with the game's button layout, and both were restored after it closed.
@@ -92,7 +93,7 @@ All three are implemented. How each one turned out on the hardware:
 
 ### Later
 
-* Verifying the device table rows beyond the Viper V3 Pro with their owners (`freenapse probe`, then `[device] allow_unverified`).
+* Verifying the read-only rows of the device table with their owners (`freenapse probe`, then `[device] allow_unverified`).
 * Bluetooth connection support for mice that have it.
 * Code-signing the executable.
 

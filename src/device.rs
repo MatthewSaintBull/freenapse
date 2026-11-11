@@ -1,7 +1,7 @@
 //! High-level API for a Razer mouse (wired, or through its wireless dongle),
-//! driven by the [`DeviceSpec`] table below. The Viper V3 Pro is the one
-//! entry verified by the author; the others carry facts from OpenRazer's
-//! device list and refuse writes until an owner confirms them.
+//! driven by the [`DeviceSpec`] table below. Rows marked verified were tested
+//! write by write by an owner of that mouse; the others carry facts from
+//! OpenRazer's device list and refuse writes until an owner confirms them.
 
 use std::borrow::Cow;
 use std::thread;
@@ -97,7 +97,8 @@ macro_rules! spec {
     };
 }
 
-/// The device table. Row one is the mouse this project was written on; the
+/// The device table: one row per product id, so a mouse with a cable and a
+/// dongle has two. Verified rows were tested on the mouse by an owner; the
 /// other rows take product id, transaction id, polling command and DPI maximum
 /// from OpenRazer's device list (facts, no code) and stay unverified until an
 /// owner's `freenapse probe` output confirms them (see CONTRIBUTING.md).
@@ -173,10 +174,17 @@ impl DeviceSpec {
         }
     }
 
-    /// The mouse this project was written on, through its dongle: what the
-    /// config file is checked against when no mouse is open.
-    pub fn viper_v3_pro() -> &'static DeviceSpec {
-        &DEVICES[1]
+    /// No particular mouse: what the config file is checked against, and what
+    /// the settings window shows, until a mouse is open. It accepts whatever
+    /// some row of the table accepts (every polling rate, [`DPI_MAX_ANY`]) and
+    /// hides nothing; the open mouse's own row then narrows that down.
+    pub fn any_mouse() -> &'static DeviceSpec {
+        &ANY_MOUSE
+    }
+
+    /// True for the [`DeviceSpec::any_mouse`] placeholder (no mouse was opened yet).
+    pub fn is_placeholder(&self) -> bool {
+        self.product_id == 0
     }
 
     /// True when the product id is in the table (verified or not).
@@ -211,9 +219,42 @@ impl DeviceSpec {
     }
 }
 
+/// The highest DPI maximum of any row in the table.
+pub const DPI_MAX_ANY: u16 = {
+    let mut max = 0;
+    let mut i = 0;
+    while i < DEVICES.len() {
+        if DEVICES[i].dpi_max > max {
+            max = DEVICES[i].dpi_max;
+        }
+        i += 1;
+    }
+    max
+};
+
+/// See [`DeviceSpec::any_mouse`]. Product id 0 is no Razer product.
+static ANY_MOUSE: DeviceSpec = DeviceSpec {
+    product_id: 0,
+    name: Cow::Borrowed("Razer mouse"),
+    wireless: true,
+    transaction_id: TID_MOUSE,
+    polling: PollingStyle::HyperPolling,
+    polling_rates: &RATES_HYPERPOLLING,
+    dpi_max: DPI_MAX_ANY,
+    sensor_tracking: true,
+    supports_acceleration: true,
+    supports_rotation: true,
+    battery: true,
+    lighting: &[],
+    config: None,
+    pairing: true,
+    verified: true,
+    buttons: BUTTONS,
+};
+
 impl Default for DeviceSpec {
     fn default() -> Self {
-        DeviceSpec::viper_v3_pro().clone()
+        DeviceSpec::any_mouse().clone()
     }
 }
 
@@ -597,9 +638,10 @@ impl Mouse {
         self.hid.info.vendor_id
     }
 
-    /// True when the mouse stores macros itself. The Viper V3 Pro answers
-    /// "not supported" to every macro command, so its macros are played by the
-    /// tray app instead. Errors other than NotSupported (asleep) are propagated.
+    /// True when the mouse stores macros itself. A mouse without macro memory
+    /// (the Viper V3 Pro, the Pro Click V2 Vertical) answers "not supported"
+    /// to every macro command, so its macros are played by the tray app
+    /// instead. Errors other than NotSupported (asleep) are propagated.
     pub fn macro_support(&self) -> Result<bool> {
         if let Some(v) = self.macro_support.get() {
             return Ok(v);
@@ -631,7 +673,7 @@ impl Mouse {
     }
 
     /// Send a command. A request addressed to [`TID_MOUSE`] is re-addressed to
-    /// this mouse's transaction id (a no-op on the Viper V3 Pro); writes to an
+    /// this mouse's transaction id (a no-op on current firmware, which uses that one); writes to an
     /// unverified mouse are refused, see [`DeviceSpec::write_refusal`].
     pub fn raw(&self, req: &Report) -> Result<Report> {
         if req.transaction_id == TID_MOUSE && self.spec.transaction_id != TID_MOUSE {
@@ -971,7 +1013,7 @@ impl Mouse {
         Ok(a[1..1 + n].to_vec())
     }
 
-    /// The profile the mouse itself reports as active (not answered by the Viper V3 Pro).
+    /// The profile the mouse itself reports as active (a mouse that holds a single profile answers Failure).
     pub fn active_profile(&self) -> Result<u8> {
         Ok(self.raw(&cmd::get_active_profile())?.arguments[0])
     }
@@ -1138,13 +1180,12 @@ mod tests {
         assert!(!wired.wireless && !wired.pairing && wired.verified);
         assert_eq!((wired.polling, wired.polling_rates), (PollingStyle::Classic, &RATES_CLASSIC[..]));
         let wireless = DeviceSpec::lookup(0x00C1);
-        assert_eq!(wireless, *DeviceSpec::viper_v3_pro());
+        assert_eq!(wireless.name, "Razer Viper V3 Pro (wireless)");
         assert!(wireless.wireless && wireless.pairing && wireless.sensor_tracking && wireless.verified);
         assert_eq!(
             (wireless.polling, wireless.polling_rates, wireless.dpi_max, wireless.transaction_id),
             (PollingStyle::HyperPolling, &RATES_HYPERPOLLING[..], 35000, TID_MOUSE)
         );
-        assert_eq!(DeviceSpec::default(), wireless);
         assert_eq!(wireless.rates_text(), "125/250/500/1000/2000/4000/8000");
         assert!(wireless.dpi_ok(35000) && !wireless.dpi_ok(35001) && !wireless.dpi_ok(99));
         // Every row has a distinct product id and a non-empty rate list.
@@ -1161,7 +1202,7 @@ mod tests {
         assert_eq!(button_name(0x0b), Some("dpi-up"));
         assert_eq!(button_name(0x61), None);
         assert_eq!(ButtonFunction::dpi_cycle().describe(), "DPI cycle");
-        // The Viper keeps config.toml; the Basilisk V2 has its own file and no battery.
+        // A row that names no file keeps config.toml; the Basilisk V2 has its own file and no battery.
         let b = DeviceSpec::find(0x0085).unwrap();
         assert!(b.verified && !b.battery && b.lighting.len() == 2);
         assert_eq!(crate::config_file_name(b.config), "config-basilisk-v2.toml");
@@ -1170,14 +1211,34 @@ mod tests {
         let pc_wired = DeviceSpec::find(0x00C7).unwrap();
         assert!(!pc_wired.wireless && !pc_wired.verified && pc_wired.battery);
         assert_eq!(pc_wired.config, DeviceSpec::find(0x00C8).unwrap().config);
-        assert_eq!(crate::config_file_name(DeviceSpec::viper_v3_pro().config), "config.toml");
+        assert_eq!(crate::config_file_name(DeviceSpec::any_mouse().config), "config.toml");
         assert_eq!(crate::config_file_name(DeviceSpec::find(0x00C0).unwrap().config), "config.toml");
+        assert_eq!(crate::config_file_name(DeviceSpec::find(0x00C1).unwrap().config), "config.toml");
         for (i, d) in DEVICES.iter().enumerate() {
             assert!(!d.polling_rates.is_empty(), "{}", d.name);
             assert!(DEVICES[..i].iter().all(|o| o.product_id != d.product_id), "duplicate 0x{:04x}", d.product_id);
         }
         // The author's Viper V3 Pro (wired and wireless) and Basilisk V2, and the Pro Click V2 Vertical (issue 4).
         assert_eq!(DEVICES.iter().filter(|d| d.verified).count(), 4);
+    }
+
+    #[test]
+    fn placeholder_accepts_what_any_row_accepts() {
+        let any = DeviceSpec::any_mouse();
+        assert_eq!(DeviceSpec::default(), *any);
+        assert!(any.is_placeholder() && !any.is_known());
+        assert_eq!(any.name, "Razer mouse");
+        assert_eq!(any.buttons, BUTTONS);
+        assert_eq!(DPI_MAX_ANY, DEVICES.iter().map(|d| d.dpi_max).max().unwrap());
+        for d in DEVICES {
+            assert!(!d.is_placeholder(), "{}", d.name);
+            assert!(any.dpi_ok(d.dpi_max), "{}", d.name);
+            assert!(d.polling_rates.iter().all(|hz| any.polling_rates.contains(hz)), "{}", d.name);
+            // Nothing a row has is hidden before a mouse is open.
+            assert!(any.sensor_tracking >= d.sensor_tracking && any.pairing >= d.pairing && any.battery >= d.battery, "{}", d.name);
+            assert!(any.supports_acceleration >= d.supports_acceleration && any.supports_rotation >= d.supports_rotation, "{}", d.name);
+        }
+        assert!(!DeviceSpec::unknown(0x0123).is_placeholder());
     }
 
     #[test]
@@ -1203,8 +1264,9 @@ mod tests {
         assert!(!wireless.verified && wireless.supports_acceleration && wireless.supports_rotation);
         assert_eq!(wireless.dpi_max, 35000);
         assert!(!wireless.sensor_tracking);
-        assert!(DeviceSpec::viper_v3_pro().supports_acceleration);
-        assert!(DeviceSpec::viper_v3_pro().supports_rotation);
+        // Unlike a row whose getters answered (the Viper V3 Pro's).
+        let answered = DeviceSpec::lookup(0x00C1);
+        assert!(answered.supports_acceleration && answered.supports_rotation);
     }
 
     #[test]
@@ -1225,9 +1287,10 @@ mod tests {
         let why = listed.write_refusal(false).unwrap();
         assert!(why.contains("DeathAdder V3 Pro") && why.contains("not confirmed") || why.contains("nobody has confirmed"), "{why}");
         assert!(guard_write(&listed, false, &write).is_err());
-        // The verified mouse writes freely.
-        assert!(guard_write(DeviceSpec::viper_v3_pro(), false, &write).is_ok());
-        assert!(guard_write(&DeviceSpec::lookup(0x00C0), false, &write).is_ok());
+        // Every verified row writes freely.
+        for d in DEVICES.iter().filter(|d| d.verified) {
+            assert!(guard_write(d, false, &write).is_ok(), "{}", d.name);
+        }
     }
 }
 

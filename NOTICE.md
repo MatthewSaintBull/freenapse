@@ -8,8 +8,8 @@ covers the source code, the documentation and the project's own artwork
 
 ## Trademarks
 
-Razer, Razer Synapse, Viper, HyperSpeed, HyperPolling and Focus Pro are
-trademarks or registered trademarks of Razer Inc. freenapse is an independent
+Razer, Razer Synapse, Viper, DeathAdder, Basilisk, Cobra, Pro Click,
+HyperSpeed, HyperPolling and Focus Pro are trademarks or registered trademarks of Razer Inc. freenapse is an independent
 project. It is not affiliated with, endorsed by, sponsored by or supported by
 Razer Inc. Those names appear in this repository only to identify the hardware
 and software the project interoperates with.
@@ -19,11 +19,12 @@ not derived from any Razer artwork.
 
 ## Where the protocol knowledge comes from
 
-freenapse talks to the mouse with the vendor's HID feature-report protocol.
+freenapse talks to a mouse with the vendor's HID feature-report protocol.
 That knowledge was gathered for interoperability only, from:
 
-* the mouse and dongle themselves: their answers to commands, observed on one
-  Viper V3 Pro with its HyperPolling dongle;
+* the mice and dongles themselves: their answers to commands, observed on the
+  author's Viper V3 Pro with its HyperPolling dongle and Basilisk V2, and in
+  the `freenapse probe` outputs that owners of other mice post in issues;
 * the behaviour of Razer Synapse 4 on that machine as a user of it, observed
   through its logs and the traffic it exchanges with the mouse;
 * [OpenRazer](https://github.com/openrazer/openrazer), the GPL-2.0 Linux

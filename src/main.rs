@@ -14,7 +14,10 @@ use freenapse::sensor::Tracking;
 use freenapse::{apply, config_path};
 
 const USAGE: &str = "\
-freenapse - lightweight Razer mouse control (replaces Razer Synapse); verified on the Viper V3 Pro
+freenapse - lightweight Razer mouse control (replaces Razer Synapse)
+
+Writes to the mice an owner has verified, reads any other Razer mouse: `freenapse status` names
+the one that is connected, the Devices page of the settings window lists them all.
 
 The wireless mouse only answers while it is awake: keep moving it while running commands.
 
@@ -24,7 +27,7 @@ USAGE:
   freenapse apply                        write the config file to the mouse (onboard memory)
   freenapse config                       print the config file path (created from the mouse if missing)
   freenapse import                       overwrite the config file with the mouse's current settings
-  freenapse dpi <x> [y]                  set the live DPI (100..35000)
+  freenapse dpi <x> [y]                  set the live DPI (100 up to the mouse's maximum)
   freenapse stages <active> <dpi>...     set up to 5 DPI stages, e.g. stages 2 400 800 1600
   freenapse polling <hz>                 125|250|500|1000|2000|4000|8000
   freenapse idle <seconds>               sleep after N seconds idle (60..900)

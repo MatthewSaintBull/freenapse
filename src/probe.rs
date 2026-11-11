@@ -125,7 +125,7 @@ impl Probe<'_> {
     }
 
     /// Read the button-function of every button code in [`BUTTON_SCAN`], so a
-    /// mouse with more (or other) buttons than the Viper shows which codes exist.
+    /// mouse with more (or other) buttons than the common layout shows which codes exist.
     /// Answered codes get a line each; the others are summarised by status.
     fn buttons(&mut self) {
         let mut failed = Vec::new();

@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+- freenapse presents itself as what it is, a Synapse replacement for Razer
+  mice with a device table, not a tool for one model: the README opens with
+  the list of mice and their status, the help text, the config file's
+  comments, the bug report form and the settings window's notes speak of
+  "the mouse" and name a model only where a fact belongs to that model.
+- Before a mouse is open, the config file is checked against the widest
+  ranges of the device table instead of the Viper V3 Pro's, so a stage or a
+  clutch above 35000 DPI (the DeathAdder V4 Pro goes to 45000) is no longer
+  refused at load; the open mouse's own limits apply as before.
+- With no mouse opened yet, the window's device card says "No mouse yet" and
+  the gear page "none opened yet" instead of naming a Viper V3 Pro.
+- The About section links the supported-mice table at freenapse.app/devices
+  instead of listing the verified mice, and no longer compares Synapse's
+  footprint on the development PC. The licence line, the LICENSE file and
+  the package metadata name the author as MatthewSaintbull.
+- The addresses in the settings window are links: the website, the
+  supported-mice table and the source code in About, and the online list
+  and the "New mouse" issue form on the Devices page, open in the browser
+  with a click.
+
 ## 0.4.3 (2026-11-09)
 
 - The Razer Pro Click V2 Vertical through its HyperSpeed dongle (product id

@@ -1,7 +1,8 @@
-//! Focus Pro sensor tracking settings, written the way Synapse 4 writes them
-//! for the Viper V3 Pro.
+//! Focus Pro sensor tracking settings, for the mice whose device table row
+//! sets `sensor_tracking`. They are written the way Synapse 4 writes them for
+//! the Viper V3 Pro, the one mouse this page is verified on so far.
 //!
-//! Synapse offers two paths for this mouse and nothing else, no surface calibration:
+//! Synapse offers two paths for that mouse and nothing else, no surface calibration:
 //!
 //! * **Smart Tracking** (`LiftMode` 1 "Universal lift cut-off"): calibration
 //!   state off, lift height code 0..=2 for 1, 2 or 3 mm.

@@ -14,15 +14,23 @@ body:
       placeholder: freenapse 0.4.3
     validations:
       required: true
-  - type: dropdown
+  - type: input
     id: mouse
     attributes:
-      label: Mouse and connection
+      label: Mouse
+      description: The model, as `freenapse status` or the Devices page of the settings window names it.
+      placeholder: Basilisk V2
+    validations:
+      required: true
+  - type: dropdown
+    id: connection
+    attributes:
+      label: Connection
       options:
-        - Viper V3 Pro through the HyperPolling dongle
-        - Viper V3 Pro through the HyperSpeed dongle
-        - Viper V3 Pro wired
-        - Another Razer mouse (say which below)
+        - Wired
+        - Wireless, through the HyperSpeed dongle
+        - Wireless, through the HyperPolling dongle
+        - Wireless, another dongle (say which below)
     validations:
       required: true
   - type: dropdown

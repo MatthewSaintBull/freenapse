@@ -16,14 +16,15 @@ pub const DEFAULT_TOML: &str = r#"# freenapse configuration for one Razer mouse 
 # applies on other computers without any software running.
 
 [device]
-# freenapse writes only to mice an owner has verified (the Viper V3 Pro and the Basilisk V2). Any other
+# freenapse writes only to mice an owner has verified (the Devices page of the window lists them). Any other
 # Razer mouse opens read-only: `freenapse status` and `freenapse probe` work, writes are refused.
 # Set this to true to write to such a mouse anyway, at your own risk, after checking the probe
 # output; please open an issue with that output so the mouse can be added to the device table.
 allow_unverified = false
 
 [dpi]
-# Up to 5 stages, cycled with the button under the mouse. Range 100..35000.
+# Up to 5 stages, cycled with the mouse's DPI button. Range 100 up to the mouse's maximum
+# (20000 to 45000 depending on the model; `freenapse apply` names it when a stage is above it).
 stages = [400, 800, 1600, 3200, 6400]
 # 1-based index of the stage to select when the stages are written. A stage picked
 # with the mouse's DPI button is kept: the tray menu and the window follow the mouse.
@@ -47,7 +48,8 @@ idle_seconds = 300
 low_battery_percent = 15
 
 [sensor]
-# Lift-off of the Focus Pro sensor, the two choices Synapse offers for this mouse:
+# Lift-off of the Focus Pro sensor, on mice whose device table row has the tracking page
+# (the Viper V3 Pro so far; ignored on the others). The two choices Synapse offers:
 #   "smart"  Smart Tracking. With asymmetric = false, lift = 1..3 mm.
 #            With asymmetric = true ("Asymmetric cut-off"): lift = lift-off level 2..26,
 #            land = landing level 1..25, landing below lift-off. Synapse's defaults are 13 / 12.
@@ -74,7 +76,7 @@ led = 1
 
 [profile]
 # Onboard profile that the button and Dynamic Sensitivity settings go to: 1..5 on mice that
-# hold several. The Viper V3 Pro holds a single profile, so it only accepts 1.
+# hold several. A mouse that holds a single profile (`freenapse profiles` says how many) only accepts 1.
 active = 1
 
 [buttons]
@@ -424,10 +426,10 @@ impl Config {
         self.device.allow_unverified = Self::allow_unverified_at(path);
     }
 
-    /// Validate against the Viper V3 Pro's ranges (what the file is checked
-    /// against when no mouse is open). With a mouse open use [`Config::validate_for`].
+    /// Validate against the widest ranges of the device table (what the file is
+    /// checked against when no mouse is open). With a mouse open use [`Config::validate_for`].
     pub fn validate(&self) -> Result<(), String> {
-        self.validate_for(crate::device::DeviceSpec::viper_v3_pro())
+        self.validate_for(crate::device::DeviceSpec::any_mouse())
     }
 
     /// Validate with the DPI range and polling rates of this mouse. The in-game
@@ -847,8 +849,8 @@ pub fn parse_button(spec: &str) -> Result<Option<ButtonFunction>, String> {
     if let Some(rest) = spec.strip_prefix("clutch:") {
         let dpi = |s: &str| -> Result<u16, String> {
             let v: u16 = s.trim().parse().map_err(|_| format!("bad clutch DPI '{s}'"))?;
-            if !(crate::device::DPI_MIN..=35000).contains(&v) {
-                return Err(format!("clutch DPI must be {}..35000", crate::device::DPI_MIN));
+            if !(crate::device::DPI_MIN..=crate::device::DPI_MAX_ANY).contains(&v) {
+                return Err(format!("clutch DPI must be {}..{}", crate::device::DPI_MIN, crate::device::DPI_MAX_ANY));
             }
             Ok(v)
         };
@@ -1215,7 +1217,7 @@ mod tests {
     }
 
     #[test]
-    fn shipped_config_stays_valid_for_wired_viper_with_wireless_game_rate() {
+    fn shipped_config_stays_valid_for_a_wired_mouse_with_a_wireless_game_rate() {
         let cfg: Config = toml::from_str(DEFAULT_TOML).unwrap();
         assert_eq!(cfg.polling.game_rate, 8000);
         cfg.validate_for(&crate::device::DeviceSpec::lookup(0x00C0)).unwrap();

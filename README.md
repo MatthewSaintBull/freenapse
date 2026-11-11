@@ -7,14 +7,30 @@
 
 [![CI](https://github.com/MatthewSaintBull/freenapse/actions/workflows/ci.yml/badge.svg)](https://github.com/MatthewSaintBull/freenapse/actions/workflows/ci.yml)
 
-A tiny Rust replacement for Razer Synapse, built for the **Razer Viper V3 Pro**
-(wired, or through the HyperSpeed / HyperPolling dongle) and the **Razer
-Basilisk V2** (all 13 buttons, onboard macros, logo and wheel lighting).
+A tiny Rust replacement for Razer Synapse for **Razer mice** on Windows: one
+small executable that keeps DPI, polling rate, buttons, macros, sensor, power
+and lighting settings in the mouse's onboard memory.
 Download, changelog and guides: **https://freenapse.app**.
 
-Experimental support for other mice, including the wired DeathAdder V3 Pro,
-is listed under [Supported mice](FEATURES.md#supported-mice). Each verified
-mouse keeps its own config file, so two of them on one PC never share settings.
+What freenapse knows about a model is one row of its device table, and it
+writes only to the rows an owner of that mouse has verified:
+
+| Mouse | Status |
+|---|---|
+| **Viper V3 Pro**, wired or through the HyperSpeed / HyperPolling dongle | verified |
+| **Basilisk V2** (all 13 buttons, onboard macros, logo and wheel lighting) | verified |
+| **Pro Click V2 Vertical** through the HyperSpeed dongle | verified |
+| DeathAdder V3 Pro, wired | being tested by its owner |
+| DeathAdder V4 Pro, DeathAdder V3, Viper V2 Pro, Viper V3 HyperSpeed, Viper Mini SE, Viper 8KHz, Cobra Pro, Basilisk V3 Pro | listed, read-only until an owner confirms them |
+| Any other Razer mouse | opens read-only |
+
+The full table is under [Supported mice](FEATURES.md#supported-mice) and on
+the Devices page of the settings window. A mouse that is not verified yet
+costs its owner one command, `freenapse probe`, pasted into a
+["New mouse" issue](https://github.com/MatthewSaintBull/freenapse/issues/new/choose);
+[CONTRIBUTING.md](CONTRIBUTING.md#adding-a-mouse) has the steps. Mice that
+differ a lot keep their own config file, so two of them on one PC never share
+settings.
 
 ![The Customize page: button assignment with the mouse drawing](assets/screenshot-customize.png)
 
@@ -35,10 +51,10 @@ The tray app only adds live battery display, quick switching and the in-game
 polling rate.
 
 freenapse is an independent open-source project. It is not affiliated with,
-endorsed by or supported by Razer Inc. Razer, Razer Synapse and Viper are
+endorsed by or supported by Razer Inc. Razer, Razer Synapse and the mouse names are
 trademarks of Razer Inc., named here only to say which hardware and software
 this project works with. The protocol was worked out for interoperability
-from the mouse's own answers, the GPL OpenRazer driver and public protocol
+from the mice's own answers, the GPL OpenRazer driver and public protocol
 notes; the program contains no Razer code, files or assets.
 
 **Use at your own risk.** freenapse changes the settings stored in the mouse's
@@ -51,18 +67,19 @@ its own profile.
 
 ## What it does
 
-* DPI: up to 5 stages, active stage, live DPI (100..35000, 1 DPI steps), independent X/Y
+* DPI: up to 5 stages, active stage, live DPI (from 100 up to the mouse's maximum, 20000 to 45000 by model, in 1 DPI steps), independent X/Y
 * Dynamic Sensitivity: the onboard acceleration curve (Classic, Natural, Jump, or your own curve)
-* Polling rate: 125..8000 Hz through the dongle (8000 needs the HyperPolling dongle)
+* Polling rate: 125..8000 Hz, as far as the mouse and its link go (above 1000 Hz needs a HyperPolling mouse or dongle)
 * In-game polling rate: automatically switch to a higher rate while a game is in the foreground
 * Power: idle sleep timeout (60..900 s), low power mode threshold (5..100 %, honoured by the firmware at 1000 Hz and below), battery level and charging state
-* Sensor: Smart Tracking 1..3 mm and the asymmetric cut-off (lift-off and landing levels), written exactly as Synapse does for this mouse
+* Sensor: rotation, and on mice with the Focus Pro tracking page (the Viper V3 Pro so far) Smart Tracking 1..3 mm and the asymmetric cut-off (lift-off and landing levels), written exactly as Synapse does
 * HyperPolling dongle indicator LED mode
-* Onboard button remapping (profile 1, normal and Hypershift layer): mouse buttons, double-click, turbo, keyboard keys with modifiers, media keys, DPI stage/cycle, system sleep / power / wake, macros, Hypershift
-* Macros: record keys, mouse buttons, wheel and delays in the window (or write the steps in the config); played once / N times / while held / toggle / as a sequence. The Viper V3 Pro has no macro memory, so the tray app plays them, as Synapse does for this mouse (mice with macro memory get them stored onboard)
+* Onboard button remapping of every button the mouse has (normal and Hypershift layer): mouse buttons, double-click, turbo, keyboard keys with modifiers, media keys, DPI stage/cycle, system sleep / power / wake, macros, Hypershift
+* Macros: record keys, mouse buttons, wheel and delays in the window (or write the steps in the config); played once / N times / while held / toggle / as a sequence. A mouse with macro memory (Basilisk V2) stores them onboard; for one without (Viper V3 Pro, Pro Click V2 Vertical) the tray app plays them, as Synapse does
 * Program and Text buttons: a button starts a program (or opens a file or URL) or types a text, in any layout and with any characters; the tray app plays these like macros. Windows shortcuts such as Win+D need nothing special: they are keyboard keys, stored in the mouse
 * Game library and per-game profiles: the games installed with Steam, Epic Games, GOG, EA app, Battle.net, Riot, Ubisoft Connect, Rockstar and the Xbox app are listed automatically (read from the launchers' own files, no account or internet), and any other program can be picked with a file dialog; each game gets a DPI stage, polling rate and button layout, switched by the tray app with the foreground window
 * Dongle pairing: pair, cancel, unpair and auto-pairing
+* Lighting on mice with LEDs (Basilisk V2: logo and wheel): off, static, breathing, spectrum and brightness per zone
 * Tray icon with battery percentage, DPI stage and polling rate menu, low battery notification. It reconnects the moment the dongle is plugged in or the PC wakes, writes the config file to the mouse when you edit it by hand, and once a day asks GitHub whether a newer release exists (the only network request it makes; `check_updates = false` turns it off)
 * Settings window in the style of a game client ((navigation pane with Customize / Performance / Calibration / Power / Games / Roadmap, Windows 11 style settings rows, game tiles with cover art; see DESIGN.md)): every change is written to the mouse as you make it, no apply button
 * Firmware versions and serial numbers of mouse and dongle
@@ -80,7 +97,7 @@ plain GDI inside the same 1 MB executable.
 * **Customize**: pick a layer (Normal, Hypershift, or one per game), click a button in the list or on the mouse drawing, pick a function (default, mouse button or double-click, keyboard key with modifiers, DPI stage/cycle, media key, system sleep / power / wake, macro with its playback option, Hypershift, disabled). Mouse and keyboard functions have a Turbo toggle with a repeat rate. The MACROS section below records new macros (Stop or Esc ends the recording), renames and deletes them, and shows the macro memory left in the mouse.
 * **Performance**: DPI stages (enable, count, value per stage via slider or typed, active stage, independent X and Y), Dynamic Sensitivity with the three presets and a drag-the-points curve editor, polling rate, sensor rotation.
 * **Games**: your game profiles as tiles (click one to set its DPI stage, polling rate, name and program, or jump to its button layout) and the installed games found in the launchers as a grid of cover tiles (Steam's library art, Xbox logos, otherwise the program's icon on a generated tile) with launcher filter chips and a search box: click a game to create its profile. The "Add a program" tile opens a file dialog for anything else. Below, the in-game polling rate that profiles use by default.
-* **Calibration**: Smart Tracking (1, 2 or 3 mm) or the asymmetric cut-off with Synapse's lift-off and landing level sliders. Surface calibration and mouse-mat presets are not offered by Synapse for this mouse, so they are not here either.
+* **Calibration**: Smart Tracking (1, 2 or 3 mm) or the asymmetric cut-off with Synapse's lift-off and landing level sliders. The page is shown for mice with the Focus Pro tracking page. Surface calibration and mouse-mat presets are not offered by Synapse for the mouse it is verified on (the Viper V3 Pro), so they are not here either.
 * **Power**: battery, notification threshold, idle sleep, low power mode, dongle LED.
 * **Roadmap**: every Synapse feature with its status (done, partial, not yet, out of scope) and what the next releases aim for; the same content as ROADMAP.md.
 * The gear opens app settings: start at login, battery refresh, re-import from the mouse, re-apply everything, onboard profile selector, dongle pairing (pair, cancel, unpair, auto-pairing), device info.
@@ -156,8 +173,8 @@ freenapse raw 07 80 02                  send a raw command (class, id, size, arg
 ```
 
 A macro in the config file looks like this; `freenapse apply` writes the
-button binding to the mouse (the Viper V3 Pro has no macro memory, so the
-button sends F13..F24 and the tray app plays the macro when it sees that key):
+button binding to the mouse (on a mouse without macro memory the button
+sends F13..F24 and the tray app plays the macro when it sees that key):
 
 ```toml
 [buttons]
@@ -221,8 +238,8 @@ Razer devices accept 90-byte feature reports on their first HID interface. The
 report carries a transaction id (0x1f for the mouse, 0xff for the dongle), a
 command class and id, a data size, 80 argument bytes and an XOR checksum. The
 command layouts come from the GPL OpenRazer driver, the razerqdhid protocol
-notes, and the behaviour of Synapse 4 with this mouse as observed on one
-machine. `src/protocol.rs` has the exact bytes; NOTICE.md says what was and
+notes, and the behaviour of Synapse 4 with the author's mice as observed on
+one machine. `src/protocol.rs` has the exact bytes; NOTICE.md says what was and
 was not used.
 
 The code is plain Win32: SetupAPI enumeration, `HidD_SetFeature` /
@@ -230,11 +247,12 @@ The code is plain Win32: SetupAPI enumeration, `HidD_SetFeature` /
 
 ## Not replicated
 
-Chroma lighting beyond one effect per zone (the Basilisk V2 gets off, static,
-breathing and spectrum; the Viper V3 Pro has no LEDs), cloud profiles, Sensitivity
-Matcher, firmware updates. The onboard profile selector (config, CLI, gear page) is there, but
-the Viper V3 Pro holds a single profile and refuses others, and Synapse's
-engine for this mouse has no surface calibration, so there is none here.
+Chroma lighting beyond one effect per zone (mice with LEDs get off, static,
+breathing and spectrum), cloud profiles, Sensitivity Matcher, firmware
+updates, Bluetooth. The onboard profile selector (config, CLI, gear page) is
+there, but a mouse that holds a single profile, like the Viper V3 Pro, refuses
+others. There is no surface calibration: Synapse has none for the one mouse
+the Calibration page is verified on.
 See FEATURES.md, and ROADMAP.md for what the next releases aim to add.
 
 ## Licence

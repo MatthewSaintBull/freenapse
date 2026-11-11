@@ -1,8 +1,9 @@
 //! Software macro playback: the recorded events are injected with `SendInput`.
 //!
-//! The Viper V3 Pro has no macro memory (every class 0x06 command answers
-//! "not supported", and Synapse's device spec lists `macros: false` for it), so
-//! Synapse plays macros from the PC. freenapse does the same: a button bound to
+//! Many Razer mice have no macro memory (the Viper V3 Pro and the Pro Click V2
+//! Vertical answer "not supported" to every class 0x06 command, and Synapse's
+//! device spec lists `macros: false` for the former), so Synapse plays their
+//! macros from the PC. freenapse does the same for such a mouse: a button bound to
 //! a macro gets one of the keys F13..F24 in the mouse, and the tray app's
 //! keyboard hook swallows that key and plays the macro here.
 

@@ -209,6 +209,19 @@ impl Form {
         self.y += 36;
     }
 
+    /// An info row whose value starts with a clickable address; `rest` follows it as plain text.
+    pub fn link(&mut self, title: &str, shown: &str, url: &'static str, rest: &str) {
+        self.push(Id::None, self.x + PAD, self.y, LABEL_W - 10, 36, Kind::Text { text: title.to_string(), font: FontKind::Body, color: MUTED, flags: DT_ROW });
+        let w = (self.measure(self.body, shown) + 2).min(self.cw());
+        self.push(Id::Link(url), self.cx(), self.y, w, 36, Kind::Link { text: shown.to_string() });
+        if !rest.is_empty() {
+            let text = format!("  \u{b7}  {rest}");
+            self.push(Id::None, self.cx() + w, self.y, self.cw() - w, 36, Kind::Text { text, font: FontKind::Body, color: TEXT, flags: DT_ROW });
+        }
+        self.divider(self.y + 35);
+        self.y += 36;
+    }
+
     pub fn toggle(&mut self, title: &str, sub: &str, on: bool, id: Id) {
         let h = self.label(title, sub);
         self.push(id, self.right() - 40, self.y + (h - 20) / 2, 40, 20, Kind::Toggle { on });
@@ -551,7 +564,7 @@ fn performance(ui: &Ui, f: &mut Form) {
     let cfg = &ui.cfg;
     f.section_icon("Sensitivity", Some(Icon::Speed));
     let staged = cfg.dpi.stages.len() > 1;
-    f.toggle("Enable DPI stages", "Cycle through them with the button under the mouse", staged, Id::StagesEnabled);
+    f.toggle("Enable DPI stages", "Cycle through them with the mouse's DPI button", staged, Id::StagesEnabled);
     let xy = !cfg.dpi.y_stages.is_empty();
     f.toggle("Independent X and Y", "Separate horizontal and vertical sensitivity", xy, Id::XySplit);
     let y_of = |i: usize| if xy { cfg.dpi.y_stages.get(i).copied() } else { None };
@@ -843,7 +856,7 @@ fn calibration(ui: &Ui, f: &mut Form) {
             |v| v.to_string(),
             Id::Land,
         );
-        f.note("Same sliders as Synapse's Asymmetric Cut-off for the Viper V3 Pro (lift-off 2..26, landing 1..25, Synapse's defaults 13 / 12). The mouse accepts the values but cannot read them back, so they are rewritten on every apply.");
+        f.note("Same sliders as Synapse's Asymmetric Cut-off for this mouse (lift-off 2..26, landing 1..25, Synapse's defaults 13 / 12). The mouse accepts the values but cannot read them back, so they are rewritten on every apply.");
     } else {
         f.slider("Lift-off distance", "1 mm is the lowest the sensor supports", 1, 3, 1, s.lift as i32, |v| format!("{v} mm"), Id::Lift);
         f.note("Smart Tracking lets the sensor adapt to the surface by itself. Synapse offers no surface calibration or mouse-mat presets for this mouse, so neither does freenapse.");
@@ -1228,7 +1241,7 @@ fn customize(ui: &Ui, f: &mut Form) {
             if ui.macro_onboard == Some(true) {
                 f.note("The macro plays from the mouse's own memory, so it works without any software. While held repeats it until the button is released; Toggle starts and stops it; Sequence plays one step per press.");
             } else {
-                f.note("The Viper V3 Pro has no macro memory, so the tray app plays the macro when the button is pressed (Synapse does the same for this mouse): keep the tray running. The button sends one of the keys F13 to F24, which the tray turns into the macro. While held repeats it until the button is released; Toggle starts and stops it; Sequence plays one step per press.");
+                f.note("This mouse has no macro memory, so the tray app plays the macro when the button is pressed (Synapse does the same for such a mouse): keep the tray running. The button sends one of the keys F13 to F24, which the tray turns into the macro. While held repeats it until the button is released; Toggle starts and stops it; Sequence plays one step per press.");
             }
         }
         CAT_LAUNCH => {
@@ -1391,7 +1404,11 @@ fn app(ui: &Ui, f: &mut Form) {
     } else {
         "  ·  unverified: read-only until [device] allow_unverified is set"
     };
-    f.info("Mouse", &format!("{model}, {link} (product id 0x{:04x}){trust}", ui.spec.product_id));
+    if ui.spec.is_placeholder() {
+        f.info("Mouse", "none opened yet");
+    } else {
+        f.info("Mouse", &format!("{model}, {link} (product id 0x{:04x}){trust}", ui.spec.product_id));
+    }
     f.info("Mouse firmware", &ui.fw.map(|(a, b)| format!("{a}.{b}")).unwrap_or_else(|| "-".into()));
     if ui.wireless {
         f.info("Dongle firmware", &ui.dongle_fw.map(|(a, b)| format!("{a}.{b}")).unwrap_or_else(|| "-".into()));
@@ -1415,12 +1432,11 @@ fn app(ui: &Ui, f: &mut Form) {
 
     f.section_icon("About", Some(Icon::Help));
     f.note("freenapse replaces Razer Synapse 4 with two small native programs and no services. Every setting is kept in the mouse's onboard memory, so it stays the same on any computer. The Devices page lists every mouse freenapse knows and how far each one goes.");
-    let verified: Vec<&str> = device_models(Status::Verified).into_iter().map(|(m, _)| m).collect();
-    f.info("Verified mice", &verified.join(", "));
-    f.info("Website", "freenapse.app  \u{b7}  downloads, changelog and guides");
-    f.info("Source code", "github.com/MatthewSaintBull/freenapse");
-    f.info("License", "MIT, by Matteo Santoro. Not affiliated with Razer Inc.");
-    f.note("Synapse 4 on this PC: 11 processes, about 1.5 GB of RAM. freenapse tray: about 10 MB. Esc closes this window; the tray icon stays.");
+    f.link("Supported mice", "freenapse.app/devices", "https://freenapse.app/devices/", "every mouse and how far freenapse goes with it");
+    f.link("Website", "freenapse.app", "https://freenapse.app", "downloads, changelog and guides");
+    f.link("Source code", "github.com/MatthewSaintBull/freenapse", "https://github.com/MatthewSaintBull/freenapse", "");
+    f.info("License", "MIT, by MatthewSaintbull. Not affiliated with Razer Inc.");
+    f.note("Esc closes this window; the tray icon stays.");
 }
 
 /// Rows an owner has partly tested (reads and some writes), short of verified.
@@ -1518,7 +1534,9 @@ fn devices(ui: &Ui, f: &mut Form) {
     }
 
     f.section_icon("Any other Razer mouse", Some(Icon::Help));
-    f.note("It opens read-only with the classic polling command and a 30000 DPI ceiling assumed. To add it: run freenapse probe, paste the output into a \"New mouse\" issue on GitHub, then test the writes and send its row of src/device.rs (CONTRIBUTING.md has the steps). The same list is at freenapse.app/devices.");
+    f.note("It opens read-only with the classic polling command and a 30000 DPI ceiling assumed. To add it: run freenapse probe, paste the output into a \"New mouse\" issue on GitHub, then test the writes and send its row of src/device.rs (CONTRIBUTING.md has the steps).");
+    f.link("Same list online", "freenapse.app/devices", "https://freenapse.app/devices/", "");
+    f.link("New mouse issue", "github.com/MatthewSaintBull/freenapse/issues", "https://github.com/MatthewSaintBull/freenapse/issues/new/choose", "");
 }
 
 /// Feature status and release roadmap (same content as ROADMAP.md).
@@ -1529,7 +1547,7 @@ fn roadmap(f: &mut Form) {
 
     f.section("Performance");
     f.status(Done, "DPI stages and active stage", "up to 5 stages, CLI, config and this window");
-    f.status(Done, "Live DPI 100..35000", "1 DPI steps");
+    f.status(Done, "Live DPI", "from 100 up to the mouse's maximum (20000 to 45000 by model), 1 DPI steps");
     f.status(Done, "Independent X/Y DPI", "CLI, config (y_stages) and the X/Y toggle above");
     f.status(Done, "Polling rate 125..8000 Hz", "8000 needs the HyperPolling dongle");
     f.status(Done, "In-game polling rate", "while a game with a profile is in the foreground");
@@ -1539,8 +1557,12 @@ fn roadmap(f: &mut Form) {
 
     f.section("Calibration");
     f.status(Done, "Smart Tracking 1/2/3 mm", "");
-    f.status(Done, "Asymmetric cut-off", "lift-off 2..26 and landing 1..25, written in the same sequence Synapse uses for this mouse");
-    f.status(Never, "Surface calibration, mouse-mat presets", "Synapse offers none for the Viper V3 Pro; the firmware refuses the commands");
+    f.status(Done, "Asymmetric cut-off", "lift-off 2..26 and landing 1..25, written in the same sequence Synapse uses; mice with the Focus Pro tracking page");
+    f.status(
+        Never,
+        "Surface calibration, mouse-mat presets",
+        "only tried on the Viper V3 Pro, where Synapse offers none and the firmware refuses the commands",
+    );
     f.status(Partial, "Read back current calibration", "the asymmetric levels cannot be read, so \"Keep current\" leaves them as they are");
 
     f.section("Power");
@@ -1551,11 +1573,15 @@ fn roadmap(f: &mut Form) {
     f.status(Done, "Dongle LED mode", "HyperPolling dongle");
 
     f.section("Customize");
-    f.status(Done, "Button remapping", "7 buttons, normal and Hypershift layer, onboard profile 1");
+    f.status(Done, "Button remapping", "every button of the mouse's layout, normal and Hypershift layer, onboard");
     f.status(Done, "Button functions", "mouse, keyboard with modifiers, media, DPI stage / cycle, Hypershift, disabled");
     f.status(Done, "Double-click, turbo, system keys", "double click, turbo with a repeat rate, sleep / power / wake");
-    f.status(Never, "Profile switch button", "the mouse reports a single onboard profile, so there is nothing to switch to");
-    f.status(Done, "Macros", "record here or write steps in the config; once / N times / held / toggle / sequence. This mouse has no macro memory, so the tray app plays them, like Synapse does");
+    f.status(
+        Partial,
+        "Profile switch button",
+        "the profile functions can be bound to any button; they only do something on a mouse that holds several onboard profiles",
+    );
+    f.status(Done, "Macros", "record here or write steps in the config; once / N times / held / toggle / sequence. Stored onboard when the mouse has macro memory, otherwise played by the tray app, like Synapse does");
     f.status(
         Done,
         "Program and Text buttons",
@@ -1568,27 +1594,23 @@ fn roadmap(f: &mut Form) {
     f.status(Done, "Config file, import, re-apply", "%APPDATA%\\freenapse\\config.toml");
     f.status(Done, "Start at login", "registry Run key");
     f.status(Done, "Firmware and serial numbers", "mouse and dongle");
-    f.status(Done, "Onboard profile selection", "config, CLI and the gear page; the Viper V3 Pro reports one profile, so only 1 is accepted");
+    f.status(Done, "Onboard profile selection", "config, CLI and the gear page; a mouse that reports one profile accepts only 1");
     f.status(Done, "Per-game profiles", "DPI stage, polling rate and button layout per game, switched by the tray app");
     f.status(Done, "Game library", "Steam, Epic, GOG, EA app, Battle.net, Riot, Ubisoft, Rockstar, Xbox; any other program by file dialog");
     f.status(Done, "Dongle pairing", "pair, cancel, unpair and auto-pairing from the gear page and the CLI");
-    f.status(Todo, "Bluetooth", "the Viper V3 Pro has no Bluetooth; kept for other mice");
-    f.status(
-        Partial,
-        "Other Razer mice",
-        "Basilisk V2 and Pro Click V2 Vertical verified, DeathAdder V3 Pro being tested, the rest read-only: see the Devices page",
-    );
+    f.status(Todo, "Bluetooth", "no verified mouse uses it yet; kept for the ones that do");
+    f.status(Partial, "Other Razer mice", "a device table decides what each model accepts: verified, being tested or read-only, see the Devices page");
     f.status(Never, "Firmware update", "use Razer's updater once if you need it");
     f.status(Partial, "Chroma lighting", "off, static, breathing and spectrum per zone on mice with LEDs (Basilisk V2); no wave or per-key frames");
     f.status(Never, "Account, cloud", "telemetry too; by design");
 
     f.section_icon("Next release: done", Some(Icon::Checklist));
-    f.bullet(ACCENT, "Macros: record on the Customize tab (keys, mouse buttons, wheel, delays) and bind with the five playback options. The Viper V3 Pro has no macro memory, so the tray app plays them from an F13..F24 key, as Synapse does; verified: slot key read back from the mouse, key press played the macro.");
+    f.bullet(ACCENT, "Macros: record on the Customize tab (keys, mouse buttons, wheel, delays) and bind with the five playback options. On a mouse without macro memory the tray app plays them from an F13..F24 key, as Synapse does; verified: slot key read back from the mouse, key press played the macro.");
     f.bullet(ACCENT, "Per-game profiles: DPI stage, polling rate and a button layout per program; verified: polling and buttons switched 2 s after Notepad took the foreground and came back after it closed.");
     f.bullet(ACCENT, "Dongle pairing: pair, cancel, unpair on the gear page and in the CLI; verified: paired list, pairing mode start and cancel (unpair not run on purpose; auto-pairing not supported by this dongle).");
 
     f.section("Previous release");
-    f.bullet(MUTED, "Double-click, turbo and system keys; Dynamic Sensitivity with a curve editor; independent X/Y DPI; onboard profile selection; Calibration tab rebuilt on Synapse's engine for this mouse.");
+    f.bullet(MUTED, "Double-click, turbo and system keys; Dynamic Sensitivity with a curve editor; independent X/Y DPI; onboard profile selection; Calibration tab rebuilt on Synapse's engine for the Focus Pro tracking page.");
 
     f.section_icon("Later", Some(Icon::Checklist));
     f.bullet(BLUE, "Program and Text buttons: start a program or type a text with a button; the tray app plays them like macros. Hot-plug and wake-up reconnect, the config file re-applied when edited, and a once-a-day update notice.");
@@ -1647,8 +1669,8 @@ fn mouse_regions(f: &Form, x: i32, y: i32, w: i32, h: i32, buttons: &[crate::dev
 /// Where the buttons beyond the seven clicks sit on the drawing, in unscaled
 /// coordinates: the DPI button (or the Basilisk's DPI up and down) behind the
 /// wheel, the tilts on either side of it, the clutch on the side below the
-/// side buttons. The Viper's DPI button is really underneath; the drawing
-/// puts it where a hand would look for it.
+/// side buttons. On some mice (the Viper V3 Pro) the DPI button is really
+/// underneath; the drawing puts it where a hand would look for it.
 /// (x, y, w, h)
 type Area = (i32, i32, i32, i32);
 

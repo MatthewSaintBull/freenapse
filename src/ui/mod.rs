@@ -216,6 +216,8 @@ impl Page {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Id {
     None,
+    /// A link row: opens this address in the default browser.
+    Link(&'static str),
     Tab(usize),
     Gear,
     StagesEnabled,
@@ -333,6 +335,10 @@ pub enum FontKind {
 pub enum Kind {
     Card,
     Line,
+    /// A clickable address, in the accent colour, underlined while hovered.
+    Link {
+        text: String,
+    },
     Text {
         text: String,
         font: FontKind,
@@ -510,7 +516,7 @@ pub struct Ui {
     pub(crate) dongle_fw: Option<(u8, u8)>,
     pub(crate) serial: Option<String>,
     pub(crate) wireless: bool,
-    /// What the device table says about the open mouse (the Viper V3 Pro until one is open).
+    /// What the device table says about the open mouse (`DeviceSpec::any_mouse` until one is open).
     pub(crate) spec: DeviceSpec,
     pub(crate) asleep: bool,
     /// When the active DPI stage was last read from the mouse (the DPI button changes it).
@@ -1493,7 +1499,8 @@ impl Ui {
         let cr = rect(s(NAV_PAD), h - s(FOOTER_H) - ch - s(4), sw - s(2 * NAV_PAD), ch);
         card(dc, &cr, s(4));
         let online = self.connected && !self.asleep;
-        let model = self.spec.name.trim_start_matches("Razer ").split(" (").next().unwrap_or("Mouse").to_string();
+        let model = if self.spec.is_placeholder() { "No mouse yet" } else { self.spec.name.trim_start_matches("Razer ").split(" (").next().unwrap_or("Mouse") }
+            .to_string();
         text(dc, &rect(cr.left + s(16), cr.top + s(12), cr.right - cr.left - s(52), s(20)), &model, self.fonts.bold, TEXT, DT_ROW);
         let (licon, lcol) = match (self.connected, self.asleep, self.wireless) {
             (false, _, _) => (Icon::Warning, DIM),
@@ -1558,6 +1565,20 @@ impl Ui {
             Kind::Card => card(dc, r, s(4)),
             Kind::Line => fill(dc, r, DIVIDER),
             Kind::Text { text: t, font, color, flags } => text(dc, r, t, self.font(*font), *color, *flags),
+            Kind::Link { text: t } => {
+                let color = if pressed {
+                    ACCENT_DK
+                } else if hot {
+                    ACCENT_HI
+                } else {
+                    ACCENT
+                };
+                text(dc, r, t, self.fonts.body, color, DT_ROW);
+                if hot || pressed {
+                    let cy = (r.top + r.bottom) / 2;
+                    fill(dc, &rect(r.left, cy + s(9), r.right - r.left - s(2), s(1)), color);
+                }
+            }
             Kind::Icon { icon: ic, color } => icon(dc, self.fonts.icon, (r.left + r.right) / 2, (r.top + r.bottom) / 2, *ic, *color),
             Kind::Toggle { on } => {
                 // DESIGN.md 4.8: 20 x 40 pill; off = outline, on = accent fill.
@@ -2075,7 +2096,7 @@ impl Ui {
             Kind::Chips { .. } => Act::Chip(self.chip_at(wgt, x - wgt.rect.left)),
             Kind::Slider { .. } => Act::Slider(self.slider_value_at(wgt, x)),
             Kind::Button { .. } => Act::Button,
-            Kind::Radio { .. } | Kind::Row { .. } | Kind::Nav { .. } | Kind::Tile { .. } => Act::Click,
+            Kind::Radio { .. } | Kind::Row { .. } | Kind::Nav { .. } | Kind::Tile { .. } | Kind::Link { .. } => Act::Click,
             Kind::MouseArt { regions, .. } => Act::Art(regions.iter().find(|(_, r)| contains(r, x, py)).map(|(b, _)| *b)),
             Kind::Curve { editable: true, .. } => Act::Point(self.curve_point_at(wgt, x, py)),
             _ => return,
@@ -2514,7 +2535,7 @@ impl Ui {
     // Changes
     // ------------------------------------------------------------------
 
-    /// The physical buttons of the open mouse (the Viper's seven when none is open).
+    /// The physical buttons of the open mouse (the common layout when none is open).
     pub(crate) fn buttons(&self) -> &'static [PhysicalButton] {
         self.spec.buttons
     }
@@ -2616,6 +2637,10 @@ impl Ui {
     unsafe fn changed(&mut self, id: Id, v: i32) {
         let write = match id {
             Id::None => return,
+            Id::Link(url) => {
+                ShellExecuteW(0, wide("open").as_ptr(), wide(url).as_ptr(), ptr::null(), ptr::null(), SW_SHOWNORMAL);
+                return;
+            }
             Id::Tab(i) => {
                 self.page = Page::TABS[i];
                 self.scroll = 0;
@@ -3467,13 +3492,13 @@ mod tests {
     #[test]
     fn dpi_input_respects_the_connected_mouses_limit() {
         let deathadder = DeviceSpec::lookup(0x00B6);
-        let viper = DeviceSpec::lookup(0x00C0);
+        let focus_35k = DeviceSpec::lookup(0x00C0);
         assert_eq!(clamp_dpi(32000, &deathadder), 30000);
-        assert_eq!(clamp_dpi(32000, &viper), 32000);
+        assert_eq!(clamp_dpi(32000, &focus_35k), 32000);
         let mut cfg = Config::default();
         cfg.dpi.stages = vec![32000];
         cfg.dpi.active = 1;
         assert!(cfg.validate_for(&deathadder).is_err());
-        cfg.validate_for(&viper).unwrap();
+        cfg.validate_for(&focus_35k).unwrap();
     }
 }

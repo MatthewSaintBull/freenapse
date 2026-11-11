@@ -6,9 +6,12 @@ and keeping it clean.
 
 ## Before you start
 
-* It is developed and tested on one mouse: the Viper V3 Pro with the
-  HyperPolling dongle. If you have other Razer hardware, say which, and mark
-  anything you could not verify as unverified in `FEATURES.md`.
+* It is for Razer mice in general: what a model accepts is one row of the
+  device table in `src/device.rs`, and code that only one model needs says
+  so. The author develops on a Viper V3 Pro with the HyperPolling dongle and
+  a Basilisk V2; every other row is verified by its owner. Say which hardware
+  you tested on, and mark anything you could not verify as unverified in
+  `FEATURES.md`.
 * Build with `cargo build --release`; `cargo test` runs the protocol and config
   unit tests without hardware. See the Building section in `README.md`.
 * Stop the tray app before building: Windows will not overwrite a running

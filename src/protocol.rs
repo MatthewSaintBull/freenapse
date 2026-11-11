@@ -167,7 +167,7 @@ pub mod cmd {
         Report::new(TID_MOUSE, 0x07, 0x81, 0x01)
     }
 
-    /// Current DPI (X, Y). Range 100..=35000 on the Viper V3 Pro (Focus Pro 35K).
+    /// Current DPI (X, Y), from 100 up to the `dpi_max` of the mouse's device table row.
     pub fn set_dpi_xy(dpi_x: u16, dpi_y: u16) -> Report {
         let x = dpi_x.to_be_bytes();
         let y = dpi_y.to_be_bytes();
@@ -202,7 +202,7 @@ pub mod cmd {
         Report::new(TID_MOUSE, 0x00, 0xC0, 0x01)
     }
 
-    /// Classic polling rate command (mice without the extended one, and the Viper V3 Pro wired).
+    /// Classic polling rate command (mice without the extended one, and some HyperPolling mice on their cable).
     pub fn set_polling_rate_classic(code: u8) -> Report {
         Report::new(TID_MOUSE, 0x00, 0x05, 0x01).with_args(&[code])
     }
@@ -257,7 +257,7 @@ pub mod cmd {
     pub fn get_profile_count() -> Report {
         Report::new(TID_MOUSE, 0x05, 0x80, 0x01)
     }
-    /// The most profiles the mouse can hold (the Viper V3 Pro answers 1).
+    /// The most profiles the mouse can hold (1 on a mouse with a single onboard profile).
     pub fn get_max_profiles() -> Report {
         Report::new(TID_MOUSE, 0x05, 0x8a, 0x01)
     }
@@ -265,7 +265,7 @@ pub mod cmd {
     pub fn get_profile_list() -> Report {
         Report::new(TID_MOUSE, 0x05, 0x81, 0x50)
     }
-    /// Active profile id (the Viper V3 Pro answers Failure: it has a single profile).
+    /// Active profile id (a mouse with a single profile answers Failure).
     pub fn get_active_profile() -> Report {
         Report::new(TID_MOUSE, 0x05, 0x84, 0x01)
     }

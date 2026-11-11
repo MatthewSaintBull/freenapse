@@ -1,10 +1,13 @@
-# Razer Synapse 4 feature map for the Viper V3 Pro, and what freenapse does with it
+# Razer Synapse 4 feature map for Razer mice, and what freenapse does with it
 
-Sources: the behaviour of Synapse 4 with the Viper V3 Pro as observed on one
-machine (studied for interoperability only; freenapse contains no Razer code,
-files or assets), the GPL OpenRazer driver, and the razerqdhid protocol notes.
-Everything marked *verified* was exercised against the real mouse through the
-HyperPolling dongle.
+Sources: the behaviour of Synapse 4 with the author's mice (a Viper V3 Pro
+and a Basilisk V2) as observed on one machine (studied for interoperability
+only; freenapse contains no Razer code, files or assets), the GPL OpenRazer
+driver, the razerqdhid protocol notes, and the `freenapse probe` outputs
+owners of other mice posted in issues.
+Everything marked *verified* was exercised against a real mouse: the Viper V3
+Pro through the HyperPolling dongle unless the line names another one. Which
+mice freenapse writes to, and what each accepts, is under "Supported mice".
 
 ## What Synapse costs
 
@@ -81,6 +84,8 @@ low-battery mode, and the tray shows it as wired), rejects rotation and
 Dynamic Sensitivity, and keeps its settings in `config-basilisk-v2.toml`.
 Lighting: logo LED `0x04` and wheel LED `0x01`, effects `0x0f/0x02`
 (off `00`, static `01`, breathing `02`, spectrum `03`), brightness `0x0f/0x04`.
+
+**DeathAdder V3 Pro, wired.** Being tested by its owner (issue #2 above).
 The 30000 DPI limit follows [Razer's Focus Pro 30K specification](https://mysupport.razer.com/app/answers/detail/a_id/6125/kw/mice).
 Angle and Dynamic Sensitivity getters failed on that unit, so those commands
 and controls are disabled. Full sensor tracking and wireless 0x00B7 remain
@@ -113,7 +118,7 @@ Status at a glance and the release roadmap: [ROADMAP.md](ROADMAP.md).
 | Synapse feature | Where it lives | freenapse | Command |
 |---|---|---|---|
 | Sensitivity stages (up to 5), active stage | onboard | ✅ verified read. The stage picked with the DPI button is kept: apply writes `dpi.active` only with a changed stage list, and the Performance page re-reads the stage every 2 s while the mouse is in use (the mouse sends no notification) | `0x04/0x06` set stages, `0x04/0x86` get (VARSTORE, 7 bytes per stage) |
-| Live DPI X/Y, 100..35000 in 1 DPI steps | onboard | ✅ | `0x04/0x05` / `0x04/0x85` |
+| Live DPI X/Y, from 100 up to the mouse's maximum (20000..45000, see the table above) in 1 DPI steps | onboard | ✅ | `0x04/0x05` / `0x04/0x85` |
 | Independent X/Y sensitivity | onboard | ✅ CLI `dpi x y`, config `dpi.y_stages`, window toggle | same |
 | Polling rate 125..8000 Hz | onboard | ✅ verified read (1000 Hz) | `0x00/0x40` set (sent twice, arg 0x00 then 0x01), `0x00/0xC0` get. Codes 8000=0x01 4000=0x02 2000=0x04 1000=0x08 500=0x10 250=0x20 125=0x40 |
 | In-game polling rate (boost while a game runs) | software | ✅ tray app switches while a game with a profile owns the foreground window; the game list is filled from the launchers (see below) | config `polling.game_rate`, `[[games]]` |
@@ -125,7 +130,7 @@ Status at a glance and the release roadmap: [ROADMAP.md](ROADMAP.md).
 
 | Synapse feature | freenapse | Command |
 |---|---|---|
-| Smart Tracking, symmetric 1/2/3 mm | ✅ | `0x0b/0x03` state `[0, 4, 0]`, then `0x0b/0x0b` lift setting `[0, 4, mode=1, height=mm-1]` |
+| Smart Tracking, symmetric 1/2/3 mm | ✅ on mice with the tracking page | `0x0b/0x03` state `[0, 4, 0]`, then `0x0b/0x0b` lift setting `[0, 4, mode=1, height=mm-1]` |
 | Asymmetric Cut-off (lift-off 2..26, landing 1..25, Synapse default 13 / 12) | ✅ every step answers Success; the same sequence Synapse 4 sends for this mouse | state `[0, 4, 1]`, lift `[0, 4, mode=4, 0]`, then `0x0b/0x05` config `[0, 4, lift-off - 1, landing - 1]` |
 | Razer mouse-mat presets, custom surface calibration, mini calibration | 🚫 not offered by Synapse 4 for the Viper V3 Pro. The commands it uses for other mice (`0x0b/0x09` control, `0x0c`/`0x0d` tables) answer status 0x03 on firmware 1.11, wired, wireless, in driver mode and with the left button held | |
 
@@ -145,13 +150,13 @@ All sensor commands start with class id 0 and PixArt sensor id 4 (`CALIBRATION_S
 
 | Synapse feature | freenapse | Command |
 |---|---|---|
-| Button remapping, 7 inputs x 2 layers (normal / Hypershift) | ✅ onboard profile 1, verified read | `0x02/0x0c` `[profile, button, hypershift, category, len, data[5]]`, get `0x02/0x8c` |
+| Button remapping, every button of the mouse's layout (8 on the common one, 13 on the Basilisk V2) x 2 layers (normal / Hypershift) | ✅ onboard profile 1, verified read | `0x02/0x0c` `[profile, button, hypershift, category, len, data[5]]`, get `0x02/0x8c` |
 | Mouse functions, keyboard keys + modifiers, media keys, DPI stage/cycle, Hypershift | ✅ | categories 0x01, 0x02, 0x0a, 0x06, 0x0c |
 | Double-click, turbo, sleep/power/wake keys | ✅ verified read-back; config `double-click`, `turbo:<button>:<per second>`, `turbo-key:<combo>:<per second>`, `system:sleep|power|wake` | 0x0b `[01]`; 0x0e `[button, delayHi, delayLo]` with delay = 1000 / rate ms; 0x0d `[mods, key, delayHi, delayLo]`; 0x09 `[0x82 sleep, 0x81 power, 0x83 wake]` |
-| Profile switch button | 🚫 decoded by `buttons` (0x07: 1 next, 2 previous, 3 + id, 4/5 cycle) but pointless: the mouse holds one profile | 0x07 |
-| Macros | ✅ recorded in the window or written as steps in `[[macros]]`; bound with `macro:<id>[:<n>]`, `macro-held:<id>`, `macro-toggle:<id>`, `macro-seq:<id>`. The Viper V3 Pro has no macro memory: every class 0x06 command answers 0x05 (not supported) and Synapse's device spec says `OBMSpecs.supportedFeature.macros: false`, so Synapse plays its macros in software. freenapse does the same: each distinct binding gets a key F13..F24 (HID 0x68..0x73) in the mouse and the tray app's `WH_KEYBOARD_LL` hook swallows it and plays the events with `SendInput` | software on this mouse; for mice with macro memory: class 0x06 (see below) and button categories 0x03 `[idHi, idLo, times]`, 0x04 held, 0x05 toggle, 0x0f sequence `[idHi, idLo]` |
+| Profile switch button | 🟡 `profile-next`, `profile-prev`, `profile-cycle-up`, `profile-cycle-down` can be bound and are decoded by `buttons` (0x07: 1 next, 2 previous, 3 + id, 4/5 cycle); they do nothing on a mouse that holds one profile | 0x07 |
+| Macros | ✅ recorded in the window or written as steps in `[[macros]]`; bound with `macro:<id>[:<n>]`, `macro-held:<id>`, `macro-toggle:<id>`, `macro-seq:<id>`. A mouse with macro memory (Basilisk V2) gets them stored onboard. The Viper V3 Pro and the Pro Click V2 Vertical have none: every class 0x06 command answers 0x05 (not supported) and Synapse's device spec for the Viper says `OBMSpecs.supportedFeature.macros: false`, so Synapse plays its macros in software. freenapse does the same for such a mouse: each distinct binding gets a key F13..F24 (HID 0x68..0x73) in the mouse and the tray app's `WH_KEYBOARD_LL` hook swallows it and plays the events with `SendInput` | software on a mouse without macro memory; with it: class 0x06 (see below) and button categories 0x03 `[idHi, idLo, times]`, 0x04 held, 0x05 toggle, 0x0f sequence `[idHi, idLo]` |
 | Software-side bindings (launch program, type text, Windows shortcuts) | ✅ the Program and Text functions of the Customize page make a one-step macro (`launch:<path or URL>`, `text:<text>`) and bind it; the tray app plays it like any software macro (ShellExecute, or Unicode key events so any layout and any character work). Such a macro is never stored in the mouse, even on mice with macro memory. Windows shortcuts are plain onboard keys: `key:win+d` | software only (F13..F24 slot key in the mouse) |
-| Scroll settings | n/a, the Viper V3 Pro has a fixed notched wheel | |
+| Scroll settings (smart reel, scroll acceleration) | ❌ not implemented; no verified mouse has them | |
 
 ### Profiles, lighting, other
 
@@ -161,11 +166,11 @@ All sensor commands start with class id 0 and PixArt sensor id 4 (`CALIBRATION_S
 | Cloud profiles | ❌ one config file |
 | Per-game automatic profile switching | ✅ `[[games]]`: DPI stage, polling rate and a button layout per game, written by the tray app while that game owns the foreground window and reverted when it ends (software-side, like Synapse). A game is matched by its install folder (`dir`: any program started from inside it) or by its program name (`exe`) |
 | Game library | ✅ local scan, no account: Steam (`libraryfolders.vdf` + `appmanifest_*.acf`), Epic Games (`ProgramData\Epic\EpicGamesLauncher\Data\Manifests\*.item`, games only, no DLC), GOG Galaxy (`HKLM\SOFTWARE\WOW6432Node\GOG.com\Games`), EA app / Battle.net / Riot / Ubisoft Connect / Rockstar (their uninstall entries, by publisher, launchers excluded), Xbox app (`X:\XboxGames\*\Content\MicrosoftGame.config` on fixed drives); one entry per install folder, shown as cover tiles (Steam `appcache\librarycache` art, Xbox `MicrosoftGame.config` logos, otherwise the program's icon). Other programs: "Add a program..." file dialog. `src/library.rs`, `src/ui/art.rs`, `freenapse games` |
-| Chroma lighting | ✅ on mice with LEDs (Basilisk V2: logo and wheel): off, static, breathing (one colour or random) and spectrum per zone, one brightness, stored in the mouse. `[lighting]`, `freenapse lighting`, Performance page. Wave, reactive and per-key frames are not written. The Viper V3 Pro has no RGB |
+| Chroma lighting | ✅ on mice with LEDs (Basilisk V2: logo and wheel): off, static, breathing (one colour or random) and spectrum per zone, one brightness, stored in the mouse. `[lighting]`, `freenapse lighting`, Performance page. Wave, reactive and per-key frames are not written. A mouse without LEDs gets no lighting section |
 | Firmware update | ❌ use Razer's updater once if needed |
 | Firmware version, serial number (mouse and dongle) | ✅ verified: dongle fw 1.11, serials |
 | Dongle pairing / unpairing | ✅ gear page and `freenapse pair / pair-cancel / unpair --yes / pair-status`, with Synapse's bytes: pairing mode `0x00/0x41` `[1 start / 4 cancel, pidHi, pidLo]`, unpair `0x00/0x42` `[pidHi, pidLo]`, scan `0x00/0x46` `[mode]`, auto-pairing `0x00/0x55` set / `0xd5` get, paired list `0x00/0xbf` `[count, (state, pidHi, pidLo)...]`, all addressed to the dongle |
-| Bluetooth | n/a, the Viper V3 Pro has no Bluetooth |
+| Bluetooth | ❌ not implemented: freenapse talks to the cable or the 2.4 GHz dongle |
 | Razer account, telemetry, Razer Central | ❌ by design (the game library is read locally from the launchers instead) |
 
 ## Protocol reference

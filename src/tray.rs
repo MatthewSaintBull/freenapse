@@ -929,8 +929,8 @@ fn check_updates(hwnd: HWND) {
 }
 
 // ---------------------------------------------------------------------------
-// Software macros. The Viper V3 Pro has no macro memory, so (like Synapse) the
-// macro is played from the PC: the bound button sends F13..F24, a low-level
+// Software macros. For a mouse without macro memory (`Mouse::macro_support`)
+// the macro is played from the PC, like Synapse does: the bound button sends F13..F24, a low-level
 // keyboard hook swallows that key and plays the macro's events.
 // ---------------------------------------------------------------------------
 
