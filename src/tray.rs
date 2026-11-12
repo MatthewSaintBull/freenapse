@@ -313,6 +313,9 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
                         Err(e) => (*app).config_error = Some(e),
                     }
                     load_soft_macros(&(*app).config);
+                    if let Some(m) = (*app).mouse.as_mut() {
+                        m.set_write_access(&(*app).config);
+                    }
                     (*app).note_config_mtime();
                     (*app).config_applied = wparam == 1;
                     // The config (and the mouse) now hold the base layout; a running game is re-detected.
@@ -475,6 +478,10 @@ impl App {
 
     /// Reconnect if needed, apply the config once, read battery/DPI/polling.
     unsafe fn refresh(&mut self) {
+        // The config may have changed since the mouse was opened (the Devices page's switch).
+        if let Some(m) = self.mouse.as_mut() {
+            m.set_write_access(&self.config);
+        }
         if self.mouse.is_none() {
             match Mouse::open() {
                 Ok(m) => {

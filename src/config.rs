@@ -18,8 +18,10 @@ pub const DEFAULT_TOML: &str = r#"# freenapse configuration for one Razer mouse 
 [device]
 # freenapse writes only to mice an owner has verified (the Devices page of the window lists them). Any other
 # Razer mouse opens read-only: `freenapse status` and `freenapse probe` work, writes are refused.
-# Set this to true to write to such a mouse anyway, at your own risk, after checking the probe
-# output; please open an issue with that output so the mouse can be added to the device table.
+# To write to such a mouse anyway, at your own risk, list its product id here (the switch on the
+# Devices page does it for the connected mouse), e.g. allow_unverified = [0x0099]. `true` allows
+# every unverified mouse that uses this file. Please open an issue with the probe output and what
+# the mouse accepted, so it can be marked verified in the device table.
 allow_unverified = false
 
 [dpi]
@@ -332,7 +334,73 @@ pub struct DongleConfig {
 #[serde(default)]
 pub struct DeviceConfig {
     /// Write to a mouse that is not in the device table, or is there unverified.
-    pub allow_unverified: bool,
+    pub allow_unverified: UnverifiedAccess,
+}
+
+/// `[device] allow_unverified`: the product ids of the unverified mice the owner
+/// lets freenapse write to. `true` (the only form older versions had) allows
+/// every unverified mouse that uses the file; `false` is the empty list.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(from = "AccessRepr", into = "AccessRepr")]
+pub struct UnverifiedAccess {
+    pub all: bool,
+    pub ids: Vec<u16>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(untagged)]
+enum AccessRepr {
+    All(bool),
+    Ids(Vec<u16>),
+}
+
+impl From<AccessRepr> for UnverifiedAccess {
+    fn from(r: AccessRepr) -> Self {
+        match r {
+            AccessRepr::All(all) => UnverifiedAccess { all, ids: Vec::new() },
+            AccessRepr::Ids(mut ids) => {
+                ids.sort_unstable();
+                ids.dedup();
+                UnverifiedAccess { all: false, ids }
+            }
+        }
+    }
+}
+
+impl From<UnverifiedAccess> for AccessRepr {
+    fn from(a: UnverifiedAccess) -> Self {
+        if a.all || a.ids.is_empty() { AccessRepr::All(a.all) } else { AccessRepr::Ids(a.ids) }
+    }
+}
+
+impl UnverifiedAccess {
+    /// Whether writes to the unverified mouse with this product id go ahead.
+    pub fn allows(&self, product_id: u16) -> bool {
+        self.all || self.ids.contains(&product_id)
+    }
+
+    /// Allow or stop writes to one product id. Switching one mouse off also ends
+    /// a blanket `true`: the owner asked for a mouse to be read-only again.
+    pub fn set(&mut self, product_id: u16, on: bool) {
+        if on {
+            if !self.allows(product_id) {
+                self.ids.push(product_id);
+                self.ids.sort_unstable();
+            }
+        } else {
+            self.all = false;
+            self.ids.retain(|id| *id != product_id);
+        }
+    }
+
+    /// The value as the config file has it: `false`, `true` or `[0x0099, 0x00b6]`.
+    pub fn toml(&self) -> String {
+        if self.all || self.ids.is_empty() {
+            self.all.to_string()
+        } else {
+            format!("[{}]", self.ids.iter().map(|id| format!("0x{id:04x}")).collect::<Vec<_>>().join(", "))
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -415,16 +483,21 @@ impl Config {
         Ok(cfg)
     }
 
-    /// `[device] allow_unverified` of the file at `path`: false when the file is
-    /// missing or unreadable. Read before a mouse is opened, so the rest of the
-    /// file is not validated here.
-    pub fn allow_unverified_at(path: &Path) -> bool {
-        std::fs::read_to_string(path).ok().and_then(|t| toml::from_str::<Config>(&t).ok()).map(|c| c.device.allow_unverified).unwrap_or(false)
+    /// `[device] allow_unverified` of the file at `path`: nothing allowed when the
+    /// file is missing or unreadable. Read before the config is loaded for a
+    /// mouse, so the rest of the file is not validated here.
+    pub fn device_access_at(path: &Path) -> UnverifiedAccess {
+        std::fs::read_to_string(path).ok().and_then(|t| toml::from_str::<Config>(&t).ok()).map(|c| c.device.allow_unverified).unwrap_or_default()
+    }
+
+    /// Whether the file at `path` allows writes to the unverified mouse with this product id.
+    pub fn allow_unverified_at(path: &Path, product_id: u16) -> bool {
+        Self::device_access_at(path).allows(product_id)
     }
 
     /// Re-import replaces mouse settings, not the owner's write permission.
     pub fn preserve_device_access(&mut self, path: &Path) {
-        self.device.allow_unverified = Self::allow_unverified_at(path);
+        self.device.allow_unverified = Self::device_access_at(path);
     }
 
     /// Validate against the widest ranges of the device table (what the file is
@@ -699,7 +772,7 @@ impl Config {
     pub fn render(&self) -> String {
         let s = &self.sensor;
         let values: &[(&str, &str, String)] = &[
-            ("[device]", "allow_unverified", self.device.allow_unverified.to_string()),
+            ("[device]", "allow_unverified", self.device.allow_unverified.toml()),
             ("[dpi]", "stages", format!("{:?}", self.dpi.stages)),
             ("[dpi]", "active", self.dpi.active.to_string()),
             ("[dpi]", "y_stages", format!("{:?}", self.dpi.y_stages)),
@@ -1181,13 +1254,43 @@ mod tests {
         c.validate().unwrap();
         assert_eq!(c.dpi.stages.len(), 5);
         assert_eq!(c.polling.rate, 1000);
-        assert!(!c.device.allow_unverified);
+        assert_eq!(c.device.allow_unverified, UnverifiedAccess::default());
+        assert!(!c.device.allow_unverified.allows(0x0099));
+    }
+
+    #[test]
+    fn unverified_access_is_per_product_id() {
+        // A list allows only the mice it names.
+        let parsed: Config = toml::from_str("[device]\nallow_unverified = [0x00b6, 0x0099, 0x0099]\n").unwrap();
+        let a = &parsed.device.allow_unverified;
+        assert!(a.allows(0x0099) && a.allows(0x00B6) && !a.allows(0x00AF) && !a.all);
+        assert_eq!(a.ids, [0x0099, 0x00B6]);
+        let text = parsed.render();
+        assert!(text.contains("allow_unverified = [0x0099, 0x00b6]"), "{text}");
+        assert_eq!(toml::from_str::<Config>(&text).unwrap(), parsed);
+        // The switch of the Devices page: on adds the mouse, off removes it.
+        let mut a = UnverifiedAccess::default();
+        a.set(0x0099, true);
+        a.set(0x0099, true);
+        assert_eq!((a.toml(), a.allows(0x0099), a.allows(0x00B6)), ("[0x0099]".to_string(), true, false));
+        a.set(0x0099, false);
+        assert_eq!(a, UnverifiedAccess::default());
+        assert_eq!(a.toml(), "false");
+        // The older `true` still allows everything and stays `true` when a mouse is switched on;
+        // switching one off ends it.
+        let mut all: Config = toml::from_str("[device]\nallow_unverified = true\n").unwrap();
+        assert!(all.device.allow_unverified.allows(0x0123));
+        all.device.allow_unverified.set(0x0099, true);
+        assert_eq!(all.device.allow_unverified.toml(), "true");
+        all.device.allow_unverified.set(0x0099, false);
+        assert!(!all.device.allow_unverified.allows(0x0123));
+        assert!(toml::from_str::<Config>("[device]\nallow_unverified = \"yes\"\n").is_err());
     }
 
     #[test]
     fn device_section() {
         let parsed: Config = toml::from_str("[device]\nallow_unverified = true\n").unwrap();
-        assert!(parsed.device.allow_unverified);
+        assert!(parsed.device.allow_unverified.all);
         let text = parsed.render();
         assert!(text.contains("allow_unverified = true"), "{text}");
         let back: Config = toml::from_str(&text).unwrap();
@@ -1197,11 +1300,13 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let p = dir.join("config.toml");
         std::fs::write(&p, "[device]\nallow_unverified = true\n[dpi]\nstages = []\n").unwrap();
-        assert!(Config::allow_unverified_at(&p));
+        assert!(Config::allow_unverified_at(&p, 0x0123));
         assert!(Config::load(&p).is_err());
+        std::fs::write(&p, "[device]\nallow_unverified = [0x0099]\n[dpi]\nstages = []\n").unwrap();
+        assert!(Config::allow_unverified_at(&p, 0x0099) && !Config::allow_unverified_at(&p, 0x0123));
         std::fs::write(&p, "[dpi]\nstages = [800]\nactive = 1\n").unwrap();
-        assert!(!Config::allow_unverified_at(&p));
-        assert!(!Config::allow_unverified_at(&dir.join("missing.toml")));
+        assert!(!Config::allow_unverified_at(&p, 0x0123));
+        assert!(!Config::allow_unverified_at(&dir.join("missing.toml"), 0x0123));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1210,10 +1315,10 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("freenapse-reimport-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("config.toml");
-        std::fs::write(&path, "[device]\nallow_unverified = true\n").unwrap();
+        std::fs::write(&path, "[device]\nallow_unverified = [0x00b6]\n").unwrap();
         let mut imported = Config::default();
         imported.preserve_device_access(&path);
-        assert!(imported.device.allow_unverified);
+        assert_eq!(imported.device.allow_unverified.ids, [0x00B6]);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

@@ -58,6 +58,6 @@ body:
     id: testing
     attributes:
       label: Testing writes
-      description: Once a row exists, it is verified by its owner with `[device] allow_unverified = true`. Every write is read back, and Synapse puts its own profile back if anything goes wrong.
+      description: Once a row exists, it is verified by its owner with the "Allow writes to this mouse" switch on the Devices page (`[device] allow_unverified` in the config). Every write is read back, and Synapse puts its own profile back if anything goes wrong.
       options:
         - label: I can test writes on this mouse and report what it accepted and refused.

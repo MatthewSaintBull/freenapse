@@ -436,7 +436,7 @@ fn status(mouse: &Mouse) -> Result<(), Box<dyn std::error::Error>> {
     let trust = match (spec.verified, mouse.writes_allowed()) {
         (true, _) => "",
         (false, true) => "  [unverified; writes allowed by [device] allow_unverified]",
-        (false, false) => "  [unverified: read-only until [device] allow_unverified = true]",
+        (false, false) => "  [unverified: read-only until [device] allow_unverified names it]",
     };
     println!("device:       {} (product id 0x{:04x}){trust}", spec.name, spec.product_id);
     println!("connection:   {}", if mouse.is_wireless() { "wireless (through the dongle)" } else { "wired" });

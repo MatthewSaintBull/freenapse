@@ -66,7 +66,7 @@ Legend: ✅ done and verified on the mouse, 🟡 partial, ❌ not yet, 🚫 out 
 | Game library | ✅ | installed games read from Steam, Epic Games, GOG, EA app, Battle.net, Riot, Ubisoft Connect, Rockstar and the Xbox app (local files and registry, no account); any other program through a file dialog |
 | Dongle pairing | ✅ | pair, cancel, unpair (confirmed twice) and auto-pairing on the gear page and in the CLI, Synapse's command bytes |
 | Bluetooth | ❌ | freenapse talks to the cable or the 2.4 GHz dongle |
-| Razer mice beyond the verified ones | 🟡 | a device table (`FEATURES.md`, "Supported mice") says what each model accepts: unverified mice open read-only, `freenapse probe` collects what an issue needs, `[device] allow_unverified` lets an owner write at their own risk |
+| Razer mice beyond the verified ones | 🟡 | a device table (`FEATURES.md`, "Supported mice") says what each model accepts: unverified mice open read-only, `freenapse probe` collects what an issue needs, the "Allow writes to this mouse" switch on the Devices page (`[device] allow_unverified`, per product id) lets an owner write at their own risk |
 | Firmware update | 🚫 | use Razer's updater once if you need it |
 | Chroma lighting | 🟡 | off, static, breathing and spectrum per zone on mice with LEDs (Basilisk V2); no wave, reactive or per-key frames |
 | Razer account, cloud profiles, telemetry | 🚫 | by design |

@@ -293,6 +293,8 @@ pub enum Id {
     PairCancel,
     Unpair,
     AutoPair,
+    /// Devices page: let freenapse write to the connected, unverified mouse.
+    AllowUnverified,
 }
 
 /// Which button layout the Customize page edits.
@@ -1523,6 +1525,12 @@ impl Ui {
                     }
                 }
             },
+        };
+        // An unverified mouse says so wherever the window is: read-only, or being tested by its owner.
+        let sub = if self.connected && !self.spec.verified && !self.spec.is_placeholder() {
+            format!("{}  ·  {sub}", if self.cfg.device.allow_unverified.allows(self.spec.product_id) { "Testing" } else { "Read-only" })
+        } else {
+            sub
         };
         text(dc, &rect(cr.left + s(16), cr.top + s(32), cr.right - cr.left - s(32), s(16)), &sub, self.fonts.small, MUTED, DT_ROW);
         // Battery bar with the percentage at its right.
@@ -2919,6 +2927,41 @@ impl Ui {
                 Write::Pair(PairAct::Unpair)
             }
             Id::AutoPair => Write::Pair(PairAct::Auto(v == 1)),
+            Id::AllowUnverified => {
+                let on = v == 1;
+                if on {
+                    // Switching on asks first, in a dialog nobody can miss; Cancel is the default.
+                    let model = self.spec.name.split(" (").next().unwrap_or(&self.spec.name).to_string();
+                    let text = format!(
+                        "Nobody has confirmed writes on the {model} (product id 0x{:04x}) yet.\n\n\
+                         If you continue, freenapse sends the changes you make to this mouse. A setting the mouse \
+                         takes the wrong way may have to be put back with Razer Synapse.\n\n\
+                         Allow writes to this mouse, at your own risk?",
+                        self.spec.product_id
+                    );
+                    let answer = MessageBoxW(self.hwnd, wide(&text).as_ptr(), wide("Allow writes to an unverified mouse").as_ptr(), MB_OKCANCEL | MB_ICONWARNING | MB_DEFBUTTON2);
+                    if answer != IDOK {
+                        return;
+                    }
+                }
+                self.cfg.device.allow_unverified.set(self.spec.product_id, on);
+                // The open handle keeps the permission it was opened with: hand it the new one.
+                let cfg = self.cfg.clone();
+                self.io(move |dev| {
+                    if let Some(m) = dev.mouse.as_mut() {
+                        m.set_write_access(&cfg);
+                    }
+                    Box::new(|_: &mut Ui| {})
+                });
+                self.commit(Write::None);
+                if self.cfg.device.allow_unverified.allows(self.spec.product_id) != on {
+                    return; // the config was rejected and put back; commit said why
+                }
+                let msg = if on { "Writes to this mouse are on: changes you make are now sent to it" } else { "This mouse is read-only again" };
+                self.set_status(msg, if on { WARN } else { ACCENT });
+                InvalidateRect(self.hwnd, ptr::null(), 0);
+                return;
+            }
             Id::StageActive(i) => {
                 self.cfg.dpi.active = i as u8 + 1;
                 Write::Stages

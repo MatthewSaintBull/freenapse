@@ -62,8 +62,9 @@ costs nothing:
    list is a fine source for the maximum and the ids; take facts from it, not
    code), whether the Focus Pro tracking page of `src/sensor.rs` applies, and
    whether dongle pairing applies. New rows start with `verified false`.
-3. With the row in place, the owner sets `[device] allow_unverified = true`,
-   runs `freenapse import`, `freenapse apply`, `freenapse status` and the
+3. With the row in place, the owner switches on "Allow writes to this mouse"
+   on the window's Devices page (or lists the product id in the config,
+   `[device] allow_unverified = [0x0099]`), runs `freenapse import`, `freenapse apply`, `freenapse status` and the
    window, and reports what worked and what the mouse refused. Quit Synapse
    completely first (tray icon, then its background services), or it writes
    its own profile back over the test. Every write is

@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- An unverified mouse can be opened up for testing from the window. The
+  Devices page has an "Allow writes to this mouse" switch for the connected
+  mouse when it is not verified; it asks for confirmation in a dialog first, and the device
+  card then says "Testing" (or "Read-only" while it is off).
+- That opt-in is per product id. `[device] allow_unverified` takes a list,
+  e.g. `allow_unverified = [0x0099]`, so allowing one mouse no longer allows
+  every other unverified mouse that shares the config file; the cable and
+  the dongle of one mouse are allowed separately. `true` keeps working as
+  before. The tray and the window pick the change up without a restart.
+
 - The Razer Basilisk V3 (product id 0x0099) is in the device table, from the
   probe its owner posted (issue 5): classic polling, 26000 DPI, no battery,
   onboard macros, and its own 13-button layout with the scroll-mode button

@@ -68,9 +68,13 @@ the unverified rows come from OpenRazer's device list.
 
 "Tracking page" is the Focus Pro lift-off page of `src/sensor.rs`; ❓ means
 nobody has checked whether that mouse has it, so the Calibration page is
-hidden. `freenapse probe` prints what any of these answers; `[device]
-allow_unverified = true` in the config lets the owner of an unverified mouse
-write to it at their own risk.
+hidden. `freenapse probe` prints what any of these answers. The owner of an
+unverified mouse can let freenapse write to it, at their own risk, with the
+"Allow writes to this mouse" switch on the window's Devices page. The opt-in
+is per product id: it is stored as `[device] allow_unverified = [0x0099]` in
+that mouse's config file, so any other unverified mouse stays read-only, and
+the cable and the dongle of one mouse are allowed separately. The older
+`allow_unverified = true` still allows every unverified mouse using the file.
 
 The wired probe and write/read-back report are in [issue #2](https://github.com/MatthewSaintBull/freenapse/issues/2).
 
@@ -106,7 +110,7 @@ probed. It keeps its settings in `config-basilisk-v3.toml`.
 The 30000 DPI limit follows [Razer's Focus Pro 30K specification](https://mysupport.razer.com/app/answers/detail/a_id/6125/kw/mice).
 Angle and Dynamic Sensitivity getters failed on that unit, so those commands
 and controls are disabled. Full sensor tracking and wireless 0x00B7 remain
-unverified. Both rows require `[device] allow_unverified = true` for writes;
+unverified. Both rows require the owner's opt-in (`[device] allow_unverified`) for writes;
 re-import preserves the choice. The shipped 8000 Hz in-game setting stays valid
 on a wired Viper V3 Pro but fails if a classic-polling mouse switches to it.
 

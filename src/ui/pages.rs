@@ -1400,10 +1400,10 @@ fn app(ui: &Ui, f: &mut Form) {
     let link = if ui.wireless { "via its wireless dongle" } else { "wired" };
     let trust = if ui.spec.verified {
         ""
-    } else if ui.cfg.device.allow_unverified {
-        "  ·  unverified, writes allowed by [device] allow_unverified"
+    } else if ui.cfg.device.allow_unverified.allows(ui.spec.product_id) {
+        "  ·  unverified, writes allowed on the Devices page"
     } else {
-        "  ·  unverified: read-only until [device] allow_unverified is set"
+        "  ·  unverified: read-only until writes are allowed on the Devices page"
     };
     if ui.spec.is_placeholder() {
         f.info("Mouse", "none opened yet");
@@ -1497,10 +1497,26 @@ fn devices(ui: &Ui, f: &mut Form) {
     f.section_icon("Connected", Some(Icon::Mouse));
     if ui.battery.is_some() {
         let model = ui.spec.name.split(" (").next().unwrap_or(&ui.spec.name);
-        let state = if ui.spec.verified { "verified, every setting is written" } else { "not verified: read-only until [device] allow_unverified is set" };
+        let allowed = ui.cfg.device.allow_unverified.allows(ui.spec.product_id);
+        let state = match (ui.spec.verified, allowed) {
+            (true, _) => "verified, every setting is written",
+            (false, true) => "not verified: writes allowed by you, for testing",
+            (false, false) => "not verified: read-only",
+        };
         f.info("Mouse", &format!("{model} (product id 0x{:04x})  \u{b7}  {state}", ui.spec.product_id));
     } else {
         f.info("Mouse", "none connected");
+    }
+    // The owner's opt-in, per product id ([device] allow_unverified in the config file).
+    if !ui.spec.verified && !ui.spec.is_placeholder() {
+        let allowed = ui.cfg.device.allow_unverified.allows(ui.spec.product_id);
+        let sub = if allowed {
+            "On: changes you make here, in the tray and with the CLI are written to this mouse"
+        } else {
+            "Off: freenapse only reads this mouse. Switch on to test writes on it, at your own risk"
+        };
+        f.toggle("Allow writes to this mouse", sub, allowed, Id::AllowUnverified);
+        f.note("This applies to this model only (its product id); any other unverified mouse stays read-only. After testing, please report what the mouse accepted and refused in a \"New mouse\" issue so it can be marked verified.");
     }
 
     let groups: [(&str, Icon, Status, &str); 3] = [
@@ -1509,13 +1525,13 @@ fn devices(ui: &Ui, f: &mut Form) {
             "Being tested",
             Icon::Warning,
             Status::Testing,
-            "An owner has read back part of the settings. Writes need [device] allow_unverified = true in the config.",
+            "An owner has read back part of the settings. Writes need the owner's opt-in: the switch above with the mouse connected.",
         ),
         (
             "Read-only",
             Icon::Info,
             Status::ReadOnly,
-            "Product id, polling command and DPI ceiling are known; status and probe work, every write is refused until an owner tests the mouse.",
+            "Product id, polling command and DPI ceiling are known; status and probe work, every write is refused until its owner allows them with the switch above to test the mouse.",
         ),
     ];
     for (title, icon, st, text) in groups {

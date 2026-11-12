@@ -62,7 +62,7 @@ pub struct DeviceSpec {
     /// Dongle pairing (and the dongle indicator LED) as Synapse offers them for the HyperPolling dongle.
     pub pairing: bool,
     /// An owner confirmed writes on this mouse. Until then every write is refused
-    /// unless the config has `[device] allow_unverified = true`.
+    /// unless `[device] allow_unverified` in the config names its product id.
     pub verified: bool,
     /// The physical buttons, with the function each one has out of the box.
     pub buttons: &'static [PhysicalButton],
@@ -156,7 +156,14 @@ impl DeviceSpec {
 
     /// The table row, or the generic fallback for a Razer mouse that is not listed.
     pub fn lookup(product_id: u16) -> DeviceSpec {
-        DeviceSpec::find(product_id).cloned().unwrap_or_else(|| DeviceSpec::unknown(product_id))
+        let spec = DeviceSpec::find(product_id).cloned().unwrap_or_else(|| DeviceSpec::unknown(product_id));
+        // Debug builds only: FREENAPSE_TREAT_UNVERIFIED=1 opens a verified mouse as an
+        // unverified one, to try the read-only path and the Devices page's switch on it.
+        #[cfg(all(debug_assertions, not(test)))]
+        if std::env::var_os("FREENAPSE_TREAT_UNVERIFIED").is_some() {
+            return DeviceSpec { verified: false, ..spec };
+        }
+        spec
     }
 
     /// A Razer mouse that is not in the table: readable, writes refused, the
@@ -222,7 +229,9 @@ impl DeviceSpec {
         Some(format!(
             "{why}, so it is read-only: run `freenapse probe` and open an issue at \
              https://github.com/MatthewSaintBull/freenapse/issues with its output. \
-             To write to it anyway, at your own risk, set allow_unverified = true under [device] in the config file"
+             To write to it anyway, at your own risk, switch on \"Allow writes to this mouse\" on the Devices page \
+             of the window, or set allow_unverified = [0x{:04x}] under [device] in the config file",
+            self.product_id
         ))
     }
 }
@@ -604,7 +613,7 @@ pub fn button_name(code: u8) -> Option<&'static str> {
 pub struct Mouse {
     hid: HidDevice,
     spec: DeviceSpec,
-    /// `[device] allow_unverified` of the config file: writes to an unverified mouse go ahead.
+    /// `[device] allow_unverified` of the config file names this mouse: writes to it go ahead.
     allow_unverified: bool,
     /// Onboard profile that button and acceleration commands address.
     profile: std::cell::Cell<u8>,
@@ -619,8 +628,13 @@ impl Mouse {
     /// The mouse's config file becomes [`crate::config_path`].
     pub fn open() -> Result<Mouse> {
         let mut m = Mouse::open_with(false)?;
-        m.allow_unverified = crate::config::Config::allow_unverified_at(&crate::config_path());
+        m.allow_unverified = crate::config::Config::allow_unverified_at(&crate::config_path(), m.product_id());
         Ok(m)
+    }
+
+    /// Take the write permission from a config that changed while the mouse was open.
+    pub fn set_write_access(&mut self, cfg: &crate::config::Config) {
+        self.allow_unverified = cfg.device.allow_unverified.allows(self.product_id());
     }
 
     pub fn open_with(allow_unverified: bool) -> Result<Mouse> {
