@@ -35,7 +35,7 @@ body:
     id: version
     attributes:
       label: freenapse version
-      placeholder: freenapse 0.4.4
+      placeholder: freenapse 0.5.0
     validations:
       required: true
   - type: textarea

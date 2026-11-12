@@ -3029,7 +3029,12 @@ impl Ui {
                          Allow writes to this mouse, at your own risk?",
                         self.spec.product_id
                     );
-                    let answer = MessageBoxW(self.hwnd, wide(&text).as_ptr(), wide("Allow writes to an unverified mouse").as_ptr(), MB_OKCANCEL | MB_ICONWARNING | MB_DEFBUTTON2);
+                    let answer = MessageBoxW(
+                        self.hwnd,
+                        wide(&text).as_ptr(),
+                        wide("Allow writes to an unverified mouse").as_ptr(),
+                        MB_OKCANCEL | MB_ICONWARNING | MB_DEFBUTTON2,
+                    );
                     if answer != IDOK {
                         return;
                     }
@@ -3490,7 +3495,11 @@ impl Ui {
                 self.connected = false;
                 self.battery = None;
                 self.pending = true;
-                self.set_notice("Not on the mouse yet", "The mouse is not connected. The change is in the config file and is written when the mouse is back.", WARN);
+                self.set_notice(
+                    "Not on the mouse yet",
+                    "The mouse is not connected. The change is in the config file and is written when the mouse is back.",
+                    WARN,
+                );
                 false
             }
             Err(HidError::Unverified(_)) => {

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 (2026-11-12)
 
 - An unverified mouse can be opened up for testing from the window. The
   Devices page has an "Allow writes to this mouse" switch for the connected
@@ -20,6 +20,8 @@
   every other unverified mouse that shares the config file; the cable and
   the dongle of one mouse are allowed separately. `true` keeps working as
   before. The tray and the window pick the change up without a restart.
+  Versions before 0.5.0 cannot read the list: going back to one means
+  setting the line to `true` or `false` again.
 
 - The Razer Basilisk V3 (product id 0x0099) is in the device table, from the
   probe its owner posted (issue 5): classic polling, 26000 DPI, no battery,
