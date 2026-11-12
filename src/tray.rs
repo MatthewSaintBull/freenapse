@@ -525,6 +525,12 @@ impl App {
                 }
             }
         }
+        // A read-only mouse (unverified, writes not allowed) gets no apply: it would read
+        // everything, be refused at the first write and be retried every few seconds,
+        // keeping the mouse busy while the window waits to talk to it.
+        if !self.mouse.as_ref().unwrap().writes_allowed() {
+            self.config_applied = true;
+        }
         let need_apply = !self.config_applied && self.config_error.is_none();
         let wanted = self.wanted_polling();
         let result = {

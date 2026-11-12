@@ -6,6 +6,15 @@
   Devices page has an "Allow writes to this mouse" switch for the connected
   mouse when it is not verified; it asks for confirmation in a dialog first, and the device
   card then says "Testing" (or "Read-only" while it is off).
+- What happened to a change is said in a banner in its own block under the
+  page, with a close button, instead of one small line in the footer: green with "Saved to the
+  mouse", red with "Not saved to the mouse" and the reason under it (an
+  unverified mouse names the switch that allows writes), amber while the
+  mouse is asleep or away. A failure stays up for 14 s.
+- The tray no longer tries to apply the config to a read-only mouse. It
+  used to read every setting, get refused at the first write and try again
+  every 5 s, which kept the mouse busy for about a second each time and made
+  the window's own exchanges wait.
 - That opt-in is per product id. `[device] allow_unverified` takes a list,
   e.g. `allow_unverified = [0x0099]`, so allowing one mouse no longer allows
   every other unverified mouse that shares the config file; the cable and

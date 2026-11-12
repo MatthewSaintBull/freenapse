@@ -493,6 +493,16 @@ enum Write {
     Pair(PairAct),
 }
 
+/// The banner over the bottom of the content: what happened to the last change.
+/// The colour says how it went (ACCENT saved, WARN waiting, ERR not saved).
+struct Notice {
+    title: String,
+    /// The explanation under the title; empty for a one-line notice.
+    detail: String,
+    color: u32,
+    at: Instant,
+}
+
 pub struct Ui {
     hwnd: HWND,
     owner: HWND,
@@ -537,7 +547,9 @@ pub struct Ui {
     tracking_leave: bool,
     scroll: i32,
     content_h: i32,
-    status: Option<(String, u32, Instant)>,
+    status: Option<Notice>,
+    /// The pointer is over the notice's close button.
+    close_hot: bool,
     pub(crate) pending: bool,
     /// (stored, maximum) onboard profiles reported by the mouse.
     pub(crate) profiles: Option<(u8, u8)>,
@@ -704,6 +716,7 @@ unsafe fn create(owner: HWND) -> HWND {
         scroll: 0,
         content_h: 0,
         status: None,
+        close_hot: false,
         pending: false,
         profiles: None,
         sel_button: 0,
@@ -825,7 +838,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
         }
         WM_MOUSELEAVE => {
             ui.tracking_leave = false;
-            if ui.hot.take().is_some() {
+            if ui.hot.take().is_some() | std::mem::take(&mut ui.close_hot) {
                 InvalidateRect(hwnd, ptr::null(), 0);
             }
             0
@@ -1159,7 +1172,12 @@ impl Ui {
     }
 
     pub(crate) fn set_status(&mut self, text: &str, color: u32) {
-        self.status = Some((text.to_string(), color, Instant::now()));
+        self.set_notice(text, "", color);
+    }
+
+    /// A notice with a headline and the explanation under it.
+    pub(crate) fn set_notice(&mut self, title: &str, detail: &str, color: u32) {
+        self.status = Some(Notice { title: title.to_string(), detail: detail.to_string(), color, at: Instant::now() });
     }
 
     unsafe fn tick(&mut self) {
@@ -1206,7 +1224,8 @@ impl Ui {
                 });
             }
         }
-        let expired = self.status.as_ref().is_some_and(|(_, _, at)| at.elapsed().as_secs() >= 8);
+        // A failure stays up longer: it has more to read.
+        let expired = self.status.as_ref().is_some_and(|n| n.at.elapsed().as_secs() >= if n.color == ERR { 14 } else { 8 });
         if expired && !self.pending {
             self.status = None;
             repaint = true;
@@ -1238,7 +1257,41 @@ impl Ui {
 
     fn view_h(&self) -> i32 {
         let (_, h) = self.client_size();
-        (h - self.s(TOPBAR_H) - self.s(FOOTER_H)).max(1)
+        (h - self.s(TOPBAR_H) - self.dock_h()).max(1)
+    }
+
+    /// Where the notice banner and its close button sit, in client pixels, and
+    /// how many lines its explanation takes. None while there is no notice.
+    fn notice_geom(&self) -> Option<(RECT, RECT, i32)> {
+        let n = self.status.as_ref()?;
+        let s = |v: i32| self.s(v);
+        let (w, h) = self.client_size();
+        let left = self.content_left();
+        let bw = (w - left - s(2 * MARGIN)).min(s(760));
+        let text_w = bw - s(44 + 48);
+        let lines = if n.detail.is_empty() {
+            0
+        } else {
+            let tw = unsafe {
+                let dc = GetDC(self.hwnd);
+                let tw = text_width(dc, self.fonts.body, &n.detail);
+                ReleaseDC(self.hwnd, dc);
+                tw
+            };
+            tw * 100 / (text_w * 92).max(1) + 1
+        };
+        let bh = s(48) + lines * s(20) + if lines > 0 { s(6) } else { 0 };
+        let (bx, by) = (left + s(MARGIN), h - bh - s(12));
+        Some((rect(bx, by, bw, bh), rect(bx + bw - s(40), by + s(10), s(28), s(28)), lines))
+    }
+
+    /// Height of the block under the content: the thin footer at rest, and room
+    /// for the whole notice banner while one is up, so it never covers the page.
+    fn dock_h(&self) -> i32 {
+        match self.notice_geom() {
+            Some((r, _, _)) => r.bottom - r.top + self.s(24),
+            None => self.s(FOOTER_H),
+        }
     }
 
     unsafe fn layout(&mut self) {
@@ -1458,26 +1511,44 @@ impl Ui {
     unsafe fn draw_footer(&self, dc: HDC, w: i32, h: i32) {
         let s = |v: i32| self.s(v);
         let left = self.content_left();
+        let dock = self.dock_h();
+        fill(dc, &rect(left, h - dock, w - left, dock), PANEL);
         let fy = h - s(FOOTER_H);
-        fill(dc, &rect(left, fy, w - left, s(FOOTER_H)), PANEL);
-        let (msg, color, ic) = match &self.status {
-            Some((m, c, _)) => (
-                m.clone(),
-                *c,
-                if *c == ERR {
-                    Icon::Warning
-                } else if *c == WARN {
-                    Icon::Info
-                } else {
-                    Icon::Check
-                },
-            ),
-            None if self.pending => ("Changes pending: move the mouse to wake it up".to_string(), WARN, Icon::Info),
-            None => return,
+        let (Some(n), Some((r, close, lines))) = (&self.status, self.notice_geom()) else {
+            if self.pending {
+                let x = left + s(MARGIN);
+                icon(dc, self.fonts.icon_sm, x + s(6), fy + s(FOOTER_H) / 2, Icon::Info, WARN);
+                text(dc, &rect(x + s(22), fy, w - x - s(40), s(FOOTER_H)), "Changes pending: move the mouse to wake it up", self.fonts.small, WARN, DT_ROW);
+            }
+            return;
         };
-        let x = left + s(MARGIN);
-        icon(dc, self.fonts.icon_sm, x + s(6), fy + s(FOOTER_H) / 2, ic, color);
-        text(dc, &rect(x + s(22), fy, w - x - s(40), s(FOOTER_H)), &msg, self.fonts.small, color, DT_ROW);
+        // The banner: a tinted card in its own block under the content (a line sets the
+        // block apart), with an icon, a headline, the explanation wrapped under it
+        // when there is one, and a button that closes it before its time is up.
+        fill(dc, &rect(left, h - dock, w - left, 1), LINE);
+        let (ic, tint) = if n.color == ERR {
+            (Icon::Warning, rgb(0x3d, 0x1a, 0x1c))
+        } else if n.color == WARN {
+            (Icon::Info, rgb(0x3a, 0x2e, 0x12))
+        } else if n.color == ACCENT {
+            (Icon::Check, rgb(0x12, 0x30, 0x1e))
+        } else {
+            (Icon::Info, CARD)
+        };
+        let border = if tint == CARD { LINE } else { n.color };
+        let (bx, by) = (r.left, r.top);
+        let text_w = r.right - r.left - s(44 + 48);
+        round(dc, &r, s(8), Some(tint), Some((border, s(1))));
+        if self.close_hot {
+            // A lighter shade of the banner's own tint (no channel is near overflow).
+            round(dc, &close, s(4), Some(tint + 0x1c1c1c), None);
+        }
+        icon(dc, self.fonts.icon_sm, (close.left + close.right) / 2, (close.top + close.bottom) / 2, Icon::Close, if self.close_hot { TEXT } else { MUTED });
+        icon(dc, self.fonts.icon, bx + s(22), by + s(24), ic, n.color);
+        text(dc, &rect(bx + s(44), by, text_w, s(48)), &n.title, self.fonts.bold, TEXT, DT_ROW);
+        if lines > 0 {
+            text(dc, &rect(bx + s(44), by + s(40), text_w, lines * s(20)), &n.detail, self.fonts.body, MUTED, DT_LEFT_ | DT_WORDBREAK_ | DT_NOPREFIX_);
+        }
     }
 
     /// Navigation pane (DESIGN.md 4.2): wordmark, the items (drawn as widgets)
@@ -2083,6 +2154,16 @@ impl Ui {
     }
 
     unsafe fn mouse_down(&mut self, x: i32, y: i32) {
+        // The notice's close button: gone now instead of when its time is up.
+        if let Some((_, c, _)) = self.notice_geom() {
+            if x >= c.left && x < c.right && y >= c.top && y < c.bottom {
+                self.status = None;
+                self.close_hot = false;
+                self.layout();
+                InvalidateRect(self.hwnd, ptr::null(), 0);
+                return;
+            }
+        }
         let Some(i) = self.hit(x, y) else {
             trace(&format!("down ({x},{y}) hit nothing"));
             return;
@@ -2179,6 +2260,15 @@ impl Ui {
                 }
             }
             return;
+        }
+        // The notice's close button lights up under the pointer.
+        let close = self.notice_geom().map(|(_, c, _)| c);
+        let over = close.is_some_and(|c| x >= c.left && x < c.right && y >= c.top && y < c.bottom);
+        if over != self.close_hot {
+            self.close_hot = over;
+            if let Some(c) = close {
+                InvalidateRect(self.hwnd, &c, 0);
+            }
         }
         let h = self.hit(x, y);
         let chips = h.is_some_and(|i| matches!(self.widgets[i].kind, Kind::Chips { .. }));
@@ -3388,32 +3478,48 @@ impl Ui {
                     Write::Pair(PairAct::Auto(_)) => "Auto-pairing setting saved to the dongle",
                     _ => "Saved to the mouse",
                 };
-                self.set_status(msg, ACCENT);
+                // Pairing steps and the plain message are their own headline.
+                if matches!(write, Write::Pair(_) | Write::MacroDelete(_)) || msg == "Saved to the mouse" {
+                    self.set_status(msg, ACCENT);
+                } else {
+                    self.set_notice("Saved to the mouse", msg, ACCENT);
+                }
                 true
             }
             Err(HidError::Win32(..)) | Err(HidError::NotFound) => {
                 self.connected = false;
                 self.battery = None;
                 self.pending = true;
-                self.set_status("Saved. Mouse not connected: it will be applied when it is back", WARN);
+                self.set_notice("Not on the mouse yet", "The mouse is not connected. The change is in the config file and is written when the mouse is back.", WARN);
+                false
+            }
+            Err(HidError::Unverified(_)) => {
+                self.asleep = false;
+                self.pending = false;
+                self.set_notice(
+                    "Not saved to the mouse",
+                    "This mouse is not verified, so freenapse only reads it. Your change is in the config file, not in the mouse. \
+                     To write it, switch on \"Allow writes to this mouse\" on the Devices page.",
+                    ERR,
+                );
                 false
             }
             Err(HidError::Unsupported(e)) => {
                 self.asleep = false;
                 self.pending = false;
-                self.set_status(&format!("Saved, but the mouse rejected it: {e}"), ERR);
+                self.set_notice("Not saved to the mouse", &format!("The mouse rejected the change: {e}. It is in the config file only."), ERR);
                 false
             }
             Err(e) if is_asleep_error(&e) => {
                 self.asleep = true;
                 self.pending = true;
-                self.set_status("Saved. The mouse is asleep: move it and the change will be applied", WARN);
+                self.set_notice("Not on the mouse yet", "The mouse is asleep. Move it and the change is written.", WARN);
                 false
             }
             Err(e) => {
                 self.asleep = false;
                 self.pending = false;
-                self.set_status(&format!("Saved to config, but not applied to the mouse: {e}"), ERR);
+                self.set_notice("Not saved to the mouse", &format!("The change is in the config file, but writing it to the mouse failed: {e}"), ERR);
                 false
             }
         };

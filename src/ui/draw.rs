@@ -251,6 +251,7 @@ pub enum Icon {
     ChevronRight,
     ChevronDown,
     Filter,
+    Close,
 }
 
 impl Icon {
@@ -291,6 +292,7 @@ impl Icon {
             Icon::ChevronRight => 0xE76C,
             Icon::ChevronDown => 0xE70D,
             Icon::Filter => 0xE71C,
+            Icon::Close => 0xE711,
         }
     }
 }
