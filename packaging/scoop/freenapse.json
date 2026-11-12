@@ -1,5 +1,5 @@
 {
-    "version": "0.4.4",
+    "version": "0.5.0",
     "description": "Configure a Razer mouse on Windows without Razer Synapse: onboard DPI, polling rate, buttons, macros, sensor, power and lighting settings; tray app and settings window in one portable executable.",
     "homepage": "https://freenapse.app",
     "license": "MIT",
@@ -10,8 +10,8 @@
     ],
     "architecture": {
         "64bit": {
-            "url": "https://github.com/MatthewSaintBull/freenapse/releases/download/v0.4.4/freenapse.exe",
-            "hash": "ab3868daf0107acf6ce593473cd387d0b01149fe6d81c2458ec09a6f48050c89"
+            "url": "https://github.com/MatthewSaintBull/freenapse/releases/download/v0.5.0/freenapse.exe",
+            "hash": "0fad14338abf344cf339f4d8eaad5ee1fb85424282e43a03c00c47dc83d75627"
         }
     },
     "bin": "freenapse.exe",
