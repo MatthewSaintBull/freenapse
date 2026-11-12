@@ -89,7 +89,8 @@ active = 1
 #         "clutch:400" (that DPI while held), "profile-next|profile-prev|profile-cycle-up|profile-cycle-down"
 # The eighth button, dpi (under the Viper V3 Pro, on top of the Pro Click V2 Vertical), cycles the
 # stages by default ("dpi-cycle"). The Basilisk V2 has dpi-up, dpi-down, tilt-left, tilt-right,
-# clutch and profile instead (e.g. "tilt-left" = "media:prev").
+# clutch and profile instead (e.g. "tilt-left" = "media:prev"); the Basilisk V3 has dpi, scroll-mode,
+# tilt-left, tilt-right, clutch and profile.
 # Prefix with "hypershift." to bind the Hypershift layer, e.g. "hypershift.back" = "dpi-stage:5".
 # back = "default"
 # forward = "default"

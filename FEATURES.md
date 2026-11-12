@@ -62,6 +62,7 @@ the unverified rows come from OpenRazer's device list.
 | Pro Click V2 Vertical, HyperSpeed dongle | 0x00C8 | 0x1f | classic | 125, 500, 1000 | 30000 | ❓ | — | Kosminaut13 (issue 4) |
 | Pro Click V2 Vertical, wired | 0x00C7 | 0x1f | classic | 125, 500, 1000 | 30000 | ❓ | — | nobody yet (shares the dongle row's config file) |
 | Basilisk V2 (wired) | 0x0085 | 0x1f | classic `00/05` | 125, 500, 1000 | 20000 | — | — | the author |
+| Basilisk V3 (wired) | 0x0099 | 0x1f | classic `00/05` | 125, 500, 1000 | 26000 | ❓ | — | nobody yet; probe by YiQuSi (issue 5) |
 | Basilisk V3 Pro, wired / wireless | 0x00AA / 0x00AB | 0x1f | classic | 125, 500, 1000 | 30000 | ❓ | — | nobody yet |
 | Any other Razer mouse (vendor 0x1532, 90-byte control report) | — | 0x1f | classic | 125, 500, 1000 | 30000 | — | — | read-only; `freenapse probe` |
 
@@ -84,6 +85,22 @@ low-battery mode, and the tray shows it as wired), rejects rotation and
 Dynamic Sensitivity, and keeps its settings in `config-basilisk-v2.toml`.
 Lighting: logo LED `0x04` and wheel LED `0x01`, effects `0x0f/0x02`
 (off `00`, static `01`, breathing `02`, spectrum `03`), brightness `0x0f/0x04`.
+
+**Basilisk V3.** Listed from its owner's probe over the cable in
+[issue #5](https://github.com/MatthewSaintBull/freenapse/issues/5) (firmware
+1.0), read-only until that owner confirms writes with `allow_unverified`.
+Classic polling only, no battery, angle and Dynamic Sensitivity refused,
+macro memory (ids up to 100, 92160 bytes), five onboard profiles. Its 13
+buttons are in `BASILISK_V3_BUTTONS`: the seven clicks, wheel tilt left
+`0x34` and right `0x35` (wheel-left `0x68` / wheel-right `0x69` every 20 ms),
+the scroll-mode button `0x6a` (function class `0x12`), the sensitivity clutch
+`0x0f` (400 DPI while held) and the profile button `0x0e`. Code `0x60`
+answered with no function stored and is listed as the DPI button, the only
+candidate left for it; `0x0b` and `0x0c` (the Basilisk V2's DPI up and down)
+do not exist. The scroll-mode function and the wheel-left / wheel-right
+repeats have no config value yet, so they can only be kept as the default.
+Lighting (logo, wheel, underglow) is not listed: its commands have not been
+probed. It keeps its settings in `config-basilisk-v3.toml`.
 
 **DeathAdder V3 Pro, wired.** Being tested by its owner (issue #2 above).
 The 30000 DPI limit follows [Razer's Focus Pro 30K specification](https://mysupport.razer.com/app/answers/detail/a_id/6125/kw/mice).

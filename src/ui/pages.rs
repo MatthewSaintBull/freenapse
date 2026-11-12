@@ -1062,6 +1062,7 @@ fn pretty_button(name: &str) -> String {
         "tilt-right" => "Wheel tilt right",
         "clutch" => "Sensitivity clutch",
         "profile" => "Profile button",
+        "scroll-mode" => "Scroll mode button",
         other => other,
     }
     .to_string()
@@ -1650,7 +1651,7 @@ fn mouse_regions(f: &Form, x: i32, y: i32, w: i32, h: i32, buttons: &[crate::dev
     let wheel_h = g.h / 7;
     let wheel_y = g.top + g.h * 12 / 100;
     let r = |x: i32, y: i32, w: i32, h: i32| RECT { left: s(x), top: s(y), right: s(x + w), bottom: s(y + h) };
-    let mut v: Vec<(usize, RECT)> = extra_shapes(&g)
+    let mut v: Vec<(usize, RECT)> = extra_shapes(&g, buttons)
         .into_iter()
         .filter_map(|(name, (ex, ey, ew, eh))| buttons.iter().position(|b| b.name == name).map(|i| (i, r(ex, ey, ew, eh))))
         .collect();
@@ -1674,7 +1675,9 @@ fn mouse_regions(f: &Form, x: i32, y: i32, w: i32, h: i32, buttons: &[crate::dev
 /// (x, y, w, h)
 type Area = (i32, i32, i32, i32);
 
-fn extra_shapes(g: &MouseGeom) -> Vec<(&'static str, Area)> {
+fn extra_shapes(g: &MouseGeom, buttons: &[crate::device::PhysicalButton]) -> Vec<(&'static str, Area)> {
+    // A scroll-mode button sits right behind the wheel and pushes the DPI button back.
+    let dpi_at = if buttons.iter().any(|b| b.name == "scroll-mode") { 37 } else { 32 };
     let l = g.cx - g.w / 2;
     let wheel_w = g.w / 6;
     let wheel_h = g.h / 7;
@@ -1684,7 +1687,8 @@ fn extra_shapes(g: &MouseGeom) -> Vec<(&'static str, Area)> {
     vec![
         ("tilt-left", (g.cx - wheel_w / 2 - 14, wheel_y + wheel_h / 4, 10, wheel_h / 2)),
         ("tilt-right", (g.cx + wheel_w / 2 + 4, wheel_y + wheel_h / 4, 10, wheel_h / 2)),
-        ("dpi", (g.cx - dpi_w / 2, g.top + g.h * 32 / 100, dpi_w, dpi_h)),
+        ("scroll-mode", (g.cx - dpi_w / 2, g.top + g.h * 32 / 100, dpi_w, dpi_h)),
+        ("dpi", (g.cx - dpi_w / 2, g.top + g.h * dpi_at / 100, dpi_w, dpi_h)),
         ("dpi-up", (g.cx - dpi_w / 2, g.top + g.h * 32 / 100, dpi_w, dpi_h)),
         ("dpi-down", (g.cx - dpi_w / 2, g.top + g.h * 37 / 100, dpi_w, dpi_h)),
         ("clutch", (l - 12, g.top + g.h * 62 / 100, 16, g.h * 8 / 100)),
@@ -1757,7 +1761,7 @@ pub unsafe fn draw_mouse(ui: &Ui, dc: HDC, r: &RECT, highlight: usize, regions: 
     }
 
     // Buttons only some mice have, drawn where the open mouse has them.
-    for (name, (ex, ey, ew, eh)) in extra_shapes(&g) {
+    for (name, (ex, ey, ew, eh)) in extra_shapes(&g, ui.buttons()) {
         let Some(i) = ui.buttons().iter().position(|b| b.name == name) else { continue };
         let rr = RECT { left: dx(ex), top: dy(ey), right: dx(ex + ew), bottom: dy(ey + eh) };
         let (t, b) = hl(i);

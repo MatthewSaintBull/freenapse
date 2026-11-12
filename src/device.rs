@@ -136,6 +136,14 @@ pub const DEVICES: &[DeviceSpec] = &[
         config: Some("basilisk-v2"),
         ..spec!(0x0085, "Razer Basilisk V2", wireless false, tid 0x1f, Classic, RATES_CLASSIC, dpi 20000, sensor false, pairing false, verified true, acceleration false, rotation false, buttons BASILISK_V2_BUTTONS)
     },
+    // From its owner's probe over the cable (issue 5): no battery, classic polling, angle and
+    // Dynamic Sensitivity refused, macro memory, five onboard profiles. Writes not confirmed yet.
+    // Its LEDs (logo, wheel, underglow) are not listed: nobody has probed their commands.
+    DeviceSpec {
+        battery: false,
+        config: Some("basilisk-v3"),
+        ..spec!(0x0099, "Razer Basilisk V3", wireless false, tid 0x1f, Classic, RATES_CLASSIC, dpi 26000, sensor false, pairing false, verified false, acceleration false, rotation false, buttons BASILISK_V3_BUTTONS)
+    },
     spec!(0x00AA, "Razer Basilisk V3 Pro (wired)", wireless false, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified false),
     spec!(0x00AB, "Razer Basilisk V3 Pro (wireless)", wireless true, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified false),
 ];
@@ -556,7 +564,31 @@ pub const BASILISK_V2_BUTTONS: &[PhysicalButton] = &[
     PhysicalButton { name: "profile", code: 0x0e, default: ButtonFunction([0x07, 1, 0x04, 0, 0, 0, 0]) },
 ];
 
-const BUTTON_LISTS: [&[PhysicalButton]; 2] = [BUTTONS, BASILISK_V2_BUTTONS];
+/// The Basilisk V3, from its owner's probe (issue 5): the seven clicks, the wheel tilts, the
+/// scroll-mode button and the DPI button behind the wheel, the sensitivity clutch and the
+/// profile button underneath. Defaults are the bytes that mouse reported.
+pub const BASILISK_V3_BUTTONS: &[PhysicalButton] = &[
+    clicks("left", 0x01),
+    clicks("right", 0x02),
+    clicks("middle", 0x03),
+    clicks("back", 0x04),
+    clicks("forward", 0x05),
+    clicks("scroll-up", 0x09),
+    clicks("scroll-down", 0x0a),
+    // Wheel-left 0x68 / wheel-right 0x69 repeated every 20 ms while the wheel is tilted.
+    PhysicalButton { name: "tilt-left", code: 0x34, default: ButtonFunction([0x0e, 1, 0x68, 0x00, 0x14, 0, 0]) },
+    PhysicalButton { name: "tilt-right", code: 0x35, default: ButtonFunction([0x0e, 1, 0x69, 0x00, 0x14, 0, 0]) },
+    // Switches the wheel between tactile and free spin.
+    PhysicalButton { name: "scroll-mode", code: 0x6a, default: ButtonFunction([0x12, 1, 0x01, 0, 0, 0, 0]) },
+    // The only other code that answered, and with no function stored: an untouched
+    // layer reads all zero here, so that is what "default" writes back.
+    PhysicalButton { name: "dpi", code: 0x60, default: ButtonFunction::DISABLED },
+    // 400 DPI while held.
+    PhysicalButton { name: "clutch", code: 0x0f, default: ButtonFunction([0x06, 5, 0x05, 0x01, 0x90, 0x01, 0x90]) },
+    PhysicalButton { name: "profile", code: 0x0e, default: ButtonFunction([0x07, 1, 0x04, 0, 0, 0, 0]) },
+];
+
+const BUTTON_LISTS: [&[PhysicalButton]; 3] = [BUTTONS, BASILISK_V2_BUTTONS, BASILISK_V3_BUTTONS];
 
 /// A physical button by config name, on any mouse in the table.
 pub fn physical_button(name: &str) -> Option<&'static PhysicalButton> {
@@ -1197,6 +1229,14 @@ mod tests {
             }
         }
         assert_eq!(&BASILISK_V2_BUTTONS[..7], &BUTTONS[..7], "the art and the config expect the seven clicks first");
+        assert_eq!(&BASILISK_V3_BUTTONS[..7], &BUTTONS[..7]);
+        // The Basilisk V3 (issue 5): listed from a probe, read-only until its owner confirms writes.
+        let v3 = DeviceSpec::find(0x0099).unwrap();
+        assert!(!v3.verified && !v3.wireless && !v3.battery && !v3.supports_acceleration && !v3.supports_rotation);
+        assert_eq!((v3.dpi_max, v3.polling, v3.buttons.len()), (26000, PollingStyle::Classic, 13));
+        assert_eq!(crate::config_file_name(v3.config), "config-basilisk-v3.toml");
+        assert_eq!(button_name(0x6a), Some("scroll-mode"));
+        assert_eq!(v3.buttons.iter().find(|b| b.name == "dpi").map(|b| b.default), Some(ButtonFunction::DISABLED));
         assert_eq!(BUTTONS[7], PhysicalButton { name: "dpi", code: 0x60, default: ButtonFunction::dpi_cycle() });
         assert_eq!(button_name(0x60), Some("dpi"));
         assert_eq!(button_name(0x0b), Some("dpi-up"));

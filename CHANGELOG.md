@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- The Razer Basilisk V3 (product id 0x0099) is in the device table, from the
+  probe its owner posted (issue 5): classic polling, 26000 DPI, no battery,
+  onboard macros, and its own 13-button layout with the scroll-mode button
+  (code 0x6a) and the DPI button behind the wheel, the wheel tilts, the
+  clutch and the profile button. It keeps its settings in
+  `config-basilisk-v3.toml` and stays read-only until its owner confirms
+  writes with `allow_unverified`. Its lighting is not listed yet.
+
 ## 0.4.4 (2026-11-11)
 
 - freenapse presents itself as what it is, a Synapse replacement for Razer
