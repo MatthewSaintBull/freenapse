@@ -5,7 +5,10 @@
 
 # freenapse
 
+[![Support me on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I5P22AGI8D)
+
 [![CI](https://github.com/MatthewSaintBull/freenapse/actions/workflows/ci.yml/badge.svg)](https://github.com/MatthewSaintBull/freenapse/actions/workflows/ci.yml)
+
 
 A tiny Rust replacement for Razer Synapse for **Razer mice** on Windows: one
 small executable that keeps DPI, polling rate, buttons, macros, sensor, power
