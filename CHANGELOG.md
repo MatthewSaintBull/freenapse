@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- The Razer Viper V3 Pro SE is in the device table: product id 0x00DF
+  through its HyperSpeed 1000 Hz receiver, from the probe its owner posted
+  (issue 8), and 0x00DE over the cable, from OpenRazer's device list.
+  Classic polling (125, 500, 1000 Hz), 35000 DPI, the common eight buttons,
+  no macro memory. Both rows stay read-only until an owner confirms writes
+  with the "Allow writes to this mouse" switch; the Calibration page is
+  hidden until the tracking writes have been tried.
+
 ## 0.5.1 (2026-11-16)
 
 - The Razer Basilisk V3 (product id 0x0099) is verified: its owner confirmed
