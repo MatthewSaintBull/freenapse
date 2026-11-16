@@ -105,6 +105,12 @@ macro_rules! spec {
 pub const DEVICES: &[DeviceSpec] = &[
     spec!(0x00C0, "Razer Viper V3 Pro (wired)", wireless false, tid 0x1f, Classic, RATES_CLASSIC, dpi 35000, sensor true, pairing false, verified true),
     spec!(0x00C1, "Razer Viper V3 Pro (wireless)", wireless true, tid 0x1f, HyperPolling, RATES_HYPERPOLLING, dpi 35000, sensor true, pairing true, verified true),
+    // The wired id is from OpenRazer; the wireless row is from its owner's probe through the HyperSpeed
+    // 1000 Hz receiver (issue 8): classic polling (00/C0 not supported), angle and Dynamic Sensitivity
+    // getters answer, the common eight buttons, no macro memory, one onboard profile. The sensor reads
+    // answer like the Viper V3 Pro's, but nobody has tried the tracking writes, so that page stays off.
+    spec!(0x00DE, "Razer Viper V3 Pro SE (wired)", wireless false, tid 0x1f, Classic, RATES_CLASSIC, dpi 35000, sensor false, pairing false, verified false),
+    spec!(0x00DF, "Razer Viper V3 Pro SE (wireless)", wireless true, tid 0x1f, Classic, RATES_CLASSIC, dpi 35000, sensor false, pairing false, verified false),
     spec!(0x00B3, "Razer HyperPolling wireless dongle", wireless true, tid 0x1f, HyperPolling, RATES_HYPERPOLLING, dpi 30000, sensor false, pairing true, verified false),
     spec!(0x00BE, "Razer DeathAdder V4 Pro (wired)", wireless false, tid 0x1f, HyperPolling, RATES_HYPERPOLLING, dpi 45000, sensor false, pairing false, verified false),
     spec!(0x00BF, "Razer DeathAdder V4 Pro (wireless)", wireless true, tid 0x1f, HyperPolling, RATES_HYPERPOLLING, dpi 45000, sensor false, pairing true, verified false),
@@ -1257,6 +1263,13 @@ mod tests {
         assert_eq!(button_name(0x0b), Some("dpi-up"));
         assert_eq!(button_name(0x61), None);
         assert_eq!(ButtonFunction::dpi_cycle().describe(), "DPI cycle");
+        // The Viper V3 Pro SE (issue 8): classic polling on both rows, read-only until its owner confirms writes.
+        for pid in [0x00DE, 0x00DF] {
+            let se = DeviceSpec::find(pid).unwrap();
+            assert!(!se.verified && !se.sensor_tracking && !se.pairing && se.battery && se.wireless == (pid == 0x00DF));
+            assert_eq!((se.dpi_max, se.polling, se.polling_rates, se.buttons), (35000, PollingStyle::Classic, &RATES_CLASSIC[..], BUTTONS));
+            assert_eq!(crate::config_file_name(se.config), "config.toml");
+        }
         // A row that names no file keeps config.toml; the Basilisk V2 has its own file and no battery.
         let b = DeviceSpec::find(0x0085).unwrap();
         assert!(b.verified && !b.battery && b.lighting.len() == 2);
