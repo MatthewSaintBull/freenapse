@@ -111,8 +111,9 @@ pub const DEVICES: &[DeviceSpec] = &[
     spec!(0x00B6, "Razer DeathAdder V3 Pro (wired)", wireless false, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified false, acceleration false, rotation false),
     spec!(0x00B7, "Razer DeathAdder V3 Pro (wireless)", wireless true, tid 0x1f, Classic, RATES_CLASSIC, dpi 35000, sensor false, pairing false, verified false),
     spec!(0x00B2, "Razer DeathAdder V3", wireless false, tid 0x1f, HyperPolling, RATES_HYPERPOLLING, dpi 30000, sensor false, pairing false, verified false),
-    spec!(0x00A5, "Razer Viper V2 Pro (wired)", wireless false, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified false),
-    spec!(0x00A6, "Razer Viper V2 Pro (wireless)", wireless true, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified false),
+    // Firmware 2.1 answers Failure to the acceleration and angle getters (issue #6).
+    spec!(0x00A5, "Razer Viper V2 Pro (wired)", wireless false, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified false, acceleration false, rotation false),
+    spec!(0x00A6, "Razer Viper V2 Pro (wireless)", wireless true, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified false, acceleration false, rotation false),
     spec!(0x00B8, "Razer Viper V3 HyperSpeed", wireless true, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified false),
     spec!(0x009E, "Razer Viper Mini SE (wired)", wireless false, tid 0x1f, HyperPolling, RATES_HYPERPOLLING_WIRED, dpi 30000, sensor false, pairing false, verified false),
     spec!(0x009F, "Razer Viper Mini SE (wireless)", wireless true, tid 0x1f, HyperPolling, RATES_HYPERPOLLING, dpi 30000, sensor false, pairing true, verified false),

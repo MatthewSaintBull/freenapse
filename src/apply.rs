@@ -211,7 +211,14 @@ pub fn apply(mouse: &Mouse, cfg: &Config, polling_rate: u16) -> Result<Vec<Strin
         }
     }
 
-    if spec.supports_acceleration && accel_differs(mouse, cfg)? {
+    // An unverified row claims acceleration by default: a mouse that refuses the
+    // getter has none, and the rest of the config is still applied.
+    let accel_changed = spec.supports_acceleration
+        && match accel_differs(mouse, cfg) {
+            Err(HidError::Status(Status::Failure | Status::NotSupported)) if !spec.verified => false,
+            r => r?,
+        };
+    if accel_changed {
         let mode = cfg.acceleration.mode().map_err(|_| HidError::Unsupported("invalid [acceleration] section"))?;
         let samples = cfg.acceleration.samples();
         mouse.set_acceleration(cfg.acceleration.enabled, mode, Some(&samples))?;

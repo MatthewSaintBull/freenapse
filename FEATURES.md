@@ -116,6 +116,15 @@ unverified. Both rows require the owner's opt-in (`[device] allow_unverified`) f
 re-import preserves the choice. The shipped 8000 Hz in-game setting stays valid
 on a wired Viper V3 Pro but fails if a classic-polling mouse switches to it.
 
+**Viper V2 Pro.** Probed by its owner through the bundled receiver in
+[issue #6](https://github.com/MatthewSaintBull/freenapse/issues/6) (firmware
+2.1). The angle and Dynamic Sensitivity getters answer Failure, so those
+commands and controls are disabled on both rows; the wired row follows the
+wireless one and has not been probed. One onboard profile, no macro memory
+(macros are played in software), six buttons. A DPI write was confirmed by
+the owner; the other writes are still to be reported, so both rows stay
+unverified.
+
 **Pro Click V2 Vertical.** Verified by its owner through the HyperSpeed
 dongle in [issue #4](https://github.com/MatthewSaintBull/freenapse/issues/4):
 import, apply, status, DPI, idle sleep and the low-battery threshold written

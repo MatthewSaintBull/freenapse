@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- `freenapse apply` no longer stops with "device returned status Failure" on
+  the Razer Viper V2 Pro (issue 6): the mouse has no sensor rotation and no
+  Dynamic Sensitivity, and its rows said it had both. Those two settings are
+  now left out for it, and their controls are hidden.
+- On any unverified mouse opened up for testing, a refused Dynamic
+  Sensitivity read no longer aborts the apply: that setting is skipped and
+  the rest of the config is written.
+
 ## 0.5.1 (2026-11-16)
 
 - The Razer Basilisk V3 (product id 0x0099) is verified: its owner confirmed
