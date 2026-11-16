@@ -164,6 +164,12 @@ impl DeviceSpec {
     /// The table row, or the generic fallback for a Razer mouse that is not listed.
     pub fn lookup(product_id: u16) -> DeviceSpec {
         let spec = DeviceSpec::find(product_id).cloned().unwrap_or_else(|| DeviceSpec::unknown(product_id));
+        // Debug builds only: FREENAPSE_TREAT_UNLISTED=1 opens the mouse as one that is not in
+        // the table (the generic fallback row), to try that path without owning such a mouse.
+        #[cfg(all(debug_assertions, not(test)))]
+        if std::env::var_os("FREENAPSE_TREAT_UNLISTED").is_some() {
+            return DeviceSpec::unknown(product_id);
+        }
         // Debug builds only: FREENAPSE_TREAT_UNVERIFIED=1 opens a verified mouse as an
         // unverified one, to try the read-only path and the Devices page's switch on it.
         #[cfg(all(debug_assertions, not(test)))]
@@ -645,7 +651,14 @@ impl Mouse {
     }
 
     pub fn open_with(allow_unverified: bool) -> Result<Mouse> {
-        let known: Vec<u16> = DEVICES.iter().map(|d| d.product_id).collect();
+        #[allow(unused_mut)]
+        let mut known: Vec<u16> = DEVICES.iter().map(|d| d.product_id).collect();
+        // Debug builds only (see `DeviceSpec::lookup`): no listed id, so the mouse is found
+        // the way an unlisted one is.
+        #[cfg(all(debug_assertions, not(test)))]
+        if std::env::var_os("FREENAPSE_TREAT_UNLISTED").is_some() {
+            known.clear();
+        }
         let mut candidates: Vec<Mouse> = HidDevice::open_controls(VENDOR_RAZER, &known).into_iter().map(|hid| Mouse::from_hid(hid, allow_unverified)).collect();
         let mouse = match candidates.len() {
             0 => {
