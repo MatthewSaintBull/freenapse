@@ -19,7 +19,7 @@ pub const DEFAULT_TOML: &str = r#"# freenapse configuration for one Razer mouse 
 # freenapse writes only to mice an owner has verified (the Devices page of the window lists them). Any other
 # Razer mouse opens read-only: `freenapse status` and `freenapse probe` work, writes are refused.
 # To write to such a mouse anyway, at your own risk, list its product id here (the switch on the
-# Devices page does it for the connected mouse), e.g. allow_unverified = [0x0099]. `true` allows
+# Devices page does it for the connected mouse), e.g. allow_unverified = [0x00aa]. `true` allows
 # every unverified mouse that uses this file. Please open an issue with the probe output and what
 # the mouse accepted, so it can be marked verified in the device table.
 allow_unverified = false

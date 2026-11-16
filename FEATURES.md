@@ -62,7 +62,7 @@ the unverified rows come from OpenRazer's device list.
 | Pro Click V2 Vertical, HyperSpeed dongle | 0x00C8 | 0x1f | classic | 125, 500, 1000 | 30000 | ❓ | — | Kosminaut13 (issue 4) |
 | Pro Click V2 Vertical, wired | 0x00C7 | 0x1f | classic | 125, 500, 1000 | 30000 | ❓ | — | nobody yet (shares the dongle row's config file) |
 | Basilisk V2 (wired) | 0x0085 | 0x1f | classic `00/05` | 125, 500, 1000 | 20000 | — | — | the author |
-| Basilisk V3 (wired) | 0x0099 | 0x1f | classic `00/05` | 125, 500, 1000 | 26000 | ❓ | — | nobody yet; probe by YiQuSi (issue 5) |
+| Basilisk V3 (wired) | 0x0099 | 0x1f | classic `00/05` | 125, 500, 1000 | 26000 | — | — | YiQuSi (issue 5) |
 | Basilisk V3 Pro, wired / wireless | 0x00AA / 0x00AB | 0x1f | classic | 125, 500, 1000 | 30000 | ❓ | — | nobody yet |
 | Any other Razer mouse (vendor 0x1532, 90-byte control report) | — | 0x1f | classic | 125, 500, 1000 | 30000 | — | — | read-only; `freenapse probe` |
 
@@ -71,7 +71,7 @@ nobody has checked whether that mouse has it, so the Calibration page is
 hidden. `freenapse probe` prints what any of these answers. The owner of an
 unverified mouse can let freenapse write to it, at their own risk, with the
 "Allow writes to this mouse" switch on the window's Devices page. The opt-in
-is per product id: it is stored as `[device] allow_unverified = [0x0099]` in
+is per product id: it is stored as `[device] allow_unverified = [0x00aa]` in
 that mouse's config file, so any other unverified mouse stays read-only, and
 the cable and the dongle of one mouse are allowed separately. The older
 `allow_unverified = true` still allows every unverified mouse using the file.
@@ -92,15 +92,17 @@ Lighting: logo LED `0x04` and wheel LED `0x01`, effects `0x0f/0x02`
 
 **Basilisk V3.** Listed from its owner's probe over the cable in
 [issue #5](https://github.com/MatthewSaintBull/freenapse/issues/5) (firmware
-1.0), read-only until that owner confirms writes with `allow_unverified`.
+1.0) and verified by that owner: DPI stages, polling rate and button
+assignments on both layers. Onboard macros, profile switching and the wheel
+tilts were not tried on that mouse.
 Classic polling only, no battery, angle and Dynamic Sensitivity refused,
 macro memory (ids up to 100, 92160 bytes), five onboard profiles. Its 13
 buttons are in `BASILISK_V3_BUTTONS`: the seven clicks, wheel tilt left
 `0x34` and right `0x35` (wheel-left `0x68` / wheel-right `0x69` every 20 ms),
 the scroll-mode button `0x6a` (function class `0x12`), the sensitivity clutch
 `0x0f` (400 DPI while held) and the profile button `0x0e`. Code `0x60`
-answered with no function stored and is listed as the DPI button, the only
-candidate left for it; `0x0b` and `0x0c` (the Basilisk V2's DPI up and down)
+is the DPI button: the probe read no function stored there, and with none
+the button does nothing, so its default is the stage cycle; `0x0b` and `0x0c` (the Basilisk V2's DPI up and down)
 do not exist. The scroll-mode function and the wheel-left / wheel-right
 repeats have no config value yet, so they can only be kept as the default.
 Lighting (logo, wheel, underglow) is not listed: its commands have not been

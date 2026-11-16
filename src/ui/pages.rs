@@ -10,7 +10,7 @@ use super::draw::*;
 use super::{FontKind, Id, Kind, Layer, Page, TileArt, TileItem, Ui, Widget};
 use crate::accel::Mode;
 use crate::config::{MacroConfig, parse_button};
-use crate::device::{CLICK_CODES, DeviceSpec, TURBO_MAX, TURBO_MIN};
+use crate::device::{CLICK_CODES, DeviceSpec, PhysicalButton, TURBO_MAX, TURBO_MIN};
 use crate::macros::{self, Playback};
 
 /// Card padding, the label column of a settings row, and the row heights (DESIGN.md 3.3, 4.6).
@@ -1068,12 +1068,28 @@ fn pretty_button(name: &str) -> String {
     .to_string()
 }
 
+/// What a button does out of the box on the mouse whose buttons these are: a click is
+/// itself, anything else is named after the function the table has for it.
+fn default_label(own: &str, buttons: &[PhysicalButton], macros_: &[MacroConfig]) -> String {
+    let Some(b) = buttons.iter().find(|b| b.name == own).filter(|_| crate::device::button_code(own).is_none()) else {
+        return pretty_button(own);
+    };
+    match (crate::config::spec_for(&b.default), b.default.0) {
+        (Some(spec), _) => pretty_spec(Some(&spec), own, buttons, macros_),
+        // Functions the config has no value for (the Basilisk V3's scroll-mode button and tilts).
+        (None, [0x12, ..]) => "Scroll mode".into(),
+        (None, [0x0e, _, 0x68, ..]) => "Scroll left".into(),
+        (None, [0x0e, _, 0x69, ..]) => "Scroll right".into(),
+        (None, _) => pretty_button(own),
+    }
+}
+
 /// Human description of an assignment for the button list.
-pub fn pretty_spec(spec: Option<&str>, own: &str, macros_: &[MacroConfig]) -> String {
+pub fn pretty_spec(spec: Option<&str>, own: &str, buttons: &[PhysicalButton], macros_: &[MacroConfig]) -> String {
     if let Some(s) = spec {
         let (base, rate) = turbo_split(s);
         if let Some(n) = rate {
-            return format!("{} · turbo {n}/s", pretty_spec(Some(&base), own, macros_));
+            return format!("{} · turbo {n}/s", pretty_spec(Some(&base), own, buttons, macros_));
         }
         match software_step(spec, macros_) {
             Some(("launch", p)) => return format!("Program: {}", macros::launch_label(&p)),
@@ -1086,13 +1102,7 @@ pub fn pretty_spec(spec: Option<&str>, own: &str, macros_: &[MacroConfig]) -> St
         }
     }
     match spec {
-        None | Some("default") => match crate::device::physical_button(own) {
-            Some(b) if crate::device::button_code(own).is_none() => {
-                let spec = crate::config::spec_for(&b.default);
-                format!("{} (default)", pretty_spec(spec.as_deref(), "left", macros_))
-            }
-            _ => format!("{} (default)", pretty_button(own)),
-        },
+        None | Some("default") => format!("{} (default)", default_label(own, buttons, macros_)),
         Some("disabled") => "Disabled".into(),
         Some("hypershift") => "Hypershift".into(),
         Some("double-click") => "Double click".into(),
@@ -1164,7 +1174,7 @@ fn customize(ui: &Ui, f: &mut Form) {
                 inherited = spec.is_some();
             }
         }
-        let mut sub = pretty_spec(spec, name, &cfg.macros);
+        let mut sub = pretty_spec(spec, name, buttons, &cfg.macros);
         if inherited {
             sub.push_str(" · from Normal");
         }
@@ -1804,4 +1814,25 @@ pub unsafe fn draw_mouse(ui: &Ui, dc: HDC, r: &RECT, highlight: usize, regions: 
     label(6, "Scroll down", POINT { x: dx(g.cx + 6), y: dy(wheel_y + wheel_h + 10) }, false);
     label(1, "Right click", POINT { x: dx(rt - 6), y: dy(g.top + g.h * 38 / 100) }, false);
     let _ = regions;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::device::{BASILISK_V2_BUTTONS, BASILISK_V3_BUTTONS, BUTTONS};
+
+    #[test]
+    fn a_default_is_named_after_the_mouse_that_has_the_button() {
+        let label = |own: &str, buttons: &[PhysicalButton]| pretty_spec(None, own, buttons, &[]);
+        assert_eq!(label("left", BUTTONS), "Left click (default)");
+        assert_eq!(label("dpi", BUTTONS), "DPI cycle (default)");
+        // The Basilisk V3 (issue 5): functions without a config value still get one name.
+        assert_eq!(label("dpi", BASILISK_V3_BUTTONS), "DPI cycle (default)");
+        assert_eq!(label("scroll-mode", BASILISK_V3_BUTTONS), "Scroll mode (default)");
+        assert_eq!(label("tilt-left", BASILISK_V3_BUTTONS), "Scroll left (default)");
+        assert_eq!(label("tilt-right", BASILISK_V3_BUTTONS), "Scroll right (default)");
+        assert_eq!(label("clutch", BASILISK_V3_BUTTONS), "Sensitivity clutch 400 DPI (default)");
+        assert_eq!(label("clutch", BASILISK_V2_BUTTONS), "Sensitivity clutch 788 DPI (default)");
+        assert_eq!(pretty_spec(Some("disabled"), "dpi", BASILISK_V3_BUTTONS, &[]), "Disabled");
+    }
 }

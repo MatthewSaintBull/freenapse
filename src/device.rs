@@ -137,12 +137,13 @@ pub const DEVICES: &[DeviceSpec] = &[
         ..spec!(0x0085, "Razer Basilisk V2", wireless false, tid 0x1f, Classic, RATES_CLASSIC, dpi 20000, sensor false, pairing false, verified true, acceleration false, rotation false, buttons BASILISK_V2_BUTTONS)
     },
     // From its owner's probe over the cable (issue 5): no battery, classic polling, angle and
-    // Dynamic Sensitivity refused, macro memory, five onboard profiles. Writes not confirmed yet.
+    // Dynamic Sensitivity refused, macro memory, five onboard profiles. That owner confirmed DPI, polling and button writes on
+    // both layers; macros, profile switching and the wheel tilts were not tried.
     // Its LEDs (logo, wheel, underglow) are not listed: nobody has probed their commands.
     DeviceSpec {
         battery: false,
         config: Some("basilisk-v3"),
-        ..spec!(0x0099, "Razer Basilisk V3", wireless false, tid 0x1f, Classic, RATES_CLASSIC, dpi 26000, sensor false, pairing false, verified false, acceleration false, rotation false, buttons BASILISK_V3_BUTTONS)
+        ..spec!(0x0099, "Razer Basilisk V3", wireless false, tid 0x1f, Classic, RATES_CLASSIC, dpi 26000, sensor false, pairing false, verified true, acceleration false, rotation false, buttons BASILISK_V3_BUTTONS)
     },
     spec!(0x00AA, "Razer Basilisk V3 Pro (wired)", wireless false, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified false),
     spec!(0x00AB, "Razer Basilisk V3 Pro (wireless)", wireless true, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified false),
@@ -589,9 +590,9 @@ pub const BASILISK_V3_BUTTONS: &[PhysicalButton] = &[
     PhysicalButton { name: "tilt-right", code: 0x35, default: ButtonFunction([0x0e, 1, 0x69, 0x00, 0x14, 0, 0]) },
     // Switches the wheel between tactile and free spin.
     PhysicalButton { name: "scroll-mode", code: 0x6a, default: ButtonFunction([0x12, 1, 0x01, 0, 0, 0, 0]) },
-    // The only other code that answered, and with no function stored: an untouched
-    // layer reads all zero here, so that is what "default" writes back.
-    PhysicalButton { name: "dpi", code: 0x60, default: ButtonFunction::DISABLED },
+    // The probe read no function here, and with none stored the button does nothing, so
+    // "default" writes the stage cycle the button has out of the box (its owner, issue 5).
+    PhysicalButton { name: "dpi", code: 0x60, default: ButtonFunction([0x06, 1, 0x06, 0, 0, 0, 0]) },
     // 400 DPI while held.
     PhysicalButton { name: "clutch", code: 0x0f, default: ButtonFunction([0x06, 5, 0x05, 0x01, 0x90, 0x01, 0x90]) },
     PhysicalButton { name: "profile", code: 0x0e, default: ButtonFunction([0x07, 1, 0x04, 0, 0, 0, 0]) },
@@ -1244,13 +1245,13 @@ mod tests {
         }
         assert_eq!(&BASILISK_V2_BUTTONS[..7], &BUTTONS[..7], "the art and the config expect the seven clicks first");
         assert_eq!(&BASILISK_V3_BUTTONS[..7], &BUTTONS[..7]);
-        // The Basilisk V3 (issue 5): listed from a probe, read-only until its owner confirms writes.
+        // The Basilisk V3 (issue 5): listed from a probe, writes confirmed by its owner.
         let v3 = DeviceSpec::find(0x0099).unwrap();
-        assert!(!v3.verified && !v3.wireless && !v3.battery && !v3.supports_acceleration && !v3.supports_rotation);
+        assert!(v3.verified && !v3.wireless && !v3.battery && !v3.supports_acceleration && !v3.supports_rotation);
         assert_eq!((v3.dpi_max, v3.polling, v3.buttons.len()), (26000, PollingStyle::Classic, 13));
         assert_eq!(crate::config_file_name(v3.config), "config-basilisk-v3.toml");
         assert_eq!(button_name(0x6a), Some("scroll-mode"));
-        assert_eq!(v3.buttons.iter().find(|b| b.name == "dpi").map(|b| b.default), Some(ButtonFunction::DISABLED));
+        assert_eq!(v3.buttons.iter().find(|b| b.name == "dpi").map(|b| b.default), Some(ButtonFunction::dpi_cycle()));
         assert_eq!(BUTTONS[7], PhysicalButton { name: "dpi", code: 0x60, default: ButtonFunction::dpi_cycle() });
         assert_eq!(button_name(0x60), Some("dpi"));
         assert_eq!(button_name(0x0b), Some("dpi-up"));
@@ -1272,8 +1273,9 @@ mod tests {
             assert!(!d.polling_rates.is_empty(), "{}", d.name);
             assert!(DEVICES[..i].iter().all(|o| o.product_id != d.product_id), "duplicate 0x{:04x}", d.product_id);
         }
-        // The author's Viper V3 Pro (wired and wireless) and Basilisk V2, and the Pro Click V2 Vertical (issue 4).
-        assert_eq!(DEVICES.iter().filter(|d| d.verified).count(), 4);
+        // The author's Viper V3 Pro (wired and wireless) and Basilisk V2, the Pro Click V2 Vertical (issue 4)
+        // and the Basilisk V3 (issue 5).
+        assert_eq!(DEVICES.iter().filter(|d| d.verified).count(), 5);
     }
 
     #[test]

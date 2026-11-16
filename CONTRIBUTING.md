@@ -64,7 +64,7 @@ costs nothing:
    whether dongle pairing applies. New rows start with `verified false`.
 3. With the row in place, the owner switches on "Allow writes to this mouse"
    on the window's Devices page (or lists the product id in the config,
-   `[device] allow_unverified = [0x0099]`), runs `freenapse import`, `freenapse apply`, `freenapse status` and the
+   `[device] allow_unverified = [0x00aa]`), runs `freenapse import`, `freenapse apply`, `freenapse status` and the
    window, and reports what worked and what the mouse refused. Quit Synapse
    completely first (tray icon, then its background services), or it writes
    its own profile back over the test. Every write is

@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.5.1 (2026-11-16)
+
+- The Razer Basilisk V3 (product id 0x0099) is verified: its owner confirmed
+  DPI stages, the polling rate and button assignments on the normal and the
+  Hypershift layer (issue 5), so freenapse writes to it without the "Allow
+  writes to this mouse" switch. Onboard macros, profile switching and the
+  wheel tilts were not tried on that mouse; its lighting is still not listed.
+- The DPI button of the Basilisk V3 cycles the stages by default. The row
+  had "no function" as its default, taken from the probe, so the button did
+  nothing after an apply while the window said "DPI cycle (default)".
+- The Customize page names a button's default after the connected mouse. The
+  Basilisk V3's scroll-mode button read "Left click (default) (default)"; it
+  now reads "Scroll mode (default)", and its wheel tilts "Scroll left" and
+  "Scroll right" instead of another mouse's defaults.
+
 ## 0.5.0 (2026-11-12)
 
 - An unverified mouse can be opened up for testing from the window. The
