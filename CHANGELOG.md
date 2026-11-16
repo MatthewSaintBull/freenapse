@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- The Razer Basilisk V3 Pro through the Mouse Dock Pro (product id 0x00A4)
+  is in the device table, from the probes its owner posted (issue 9): the
+  HyperPolling command up to 4000 Hz instead of the classic one. It was
+  opened as an unlisted mouse before.
+- The Basilisk V3 Pro rows (cable 0x00AA, HyperSpeed dongle 0x00AB, dock)
+  get what the probes showed: the Basilisk V3's 13 buttons with the
+  scroll-mode button and the wheel tilts, no angle or Dynamic Sensitivity
+  controls, and one config file, `config-basilisk-v3-pro.toml`. Settings for
+  this mouse kept in `config.toml` are not carried over. It stays read-only
+  until an owner confirms writes.
+
 ## 0.5.1 (2026-11-16)
 
 - The Razer Basilisk V3 (product id 0x0099) is verified: its owner confirmed
