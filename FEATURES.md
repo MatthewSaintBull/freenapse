@@ -49,7 +49,7 @@ the unverified rows come from OpenRazer's device list.
 |---|---|---|---|---|---|---|---|---|
 | Viper V3 Pro, wired | 0x00C0 | 0x1f | classic `00/05` | 125, 500, 1000 | 35000 | ✅ | — | the author |
 | Viper V3 Pro, HyperSpeed / HyperPolling dongle | 0x00C1 | 0x1f | HyperPolling `00/40` | 125 .. 8000 | 35000 | ✅ | ✅ | the author |
-| Viper V3 Pro SE, wired | 0x00DE | 0x1f | classic `00/05` | 125, 500, 1000 | 35000 | ❓ | — | nobody yet (probe in issue 8) |
+| Viper V3 Pro SE, wired | 0x00DE | 0x1f | classic `00/05` | 125, 500, 1000 | 35000 | ❓ | — | yumo953 (issue 8) |
 | Viper V3 Pro SE, HyperSpeed 1000 Hz receiver | 0x00DF | 0x1f | classic `00/05` | 125, 500, 1000 | 35000 | ❓ | — | yumo953 (issue 8) |
 | HyperPolling wireless dongle (standalone) | 0x00B3 | 0x1f | HyperPolling | 125 .. 8000 | 30000 | ❓ | ✅ | nobody yet |
 | DeathAdder V4 Pro, wired / wireless | 0x00BE / 0x00BF | 0x1f | HyperPolling | 125 .. 8000 | 45000 | ❓ | wireless | nobody yet |
@@ -113,10 +113,10 @@ probed. It keeps its settings in `config-basilisk-v3.toml`.
 **Viper V3 Pro SE.** Listed from its owner's probes in
 [issue #8](https://github.com/MatthewSaintBull/freenapse/issues/8) (firmware
 1.0), through the HyperSpeed 1000 Hz receiver and over the cable, and
-verified by that owner through the receiver: DPI stages, polling rate and
-button assignments on both layers. Idle sleep, the low-battery threshold,
-rotation and Dynamic Sensitivity were not tried; over the cable nothing has
-been written, so that row stays read-only. Both links answer the classic
+verified by that owner on both: DPI stages, polling rate and button
+assignments on both layers, with the same writes accepted either way. Idle
+sleep, the low-battery threshold, rotation and Dynamic Sensitivity were not
+tried. Both links answer the classic
 polling command only (`00/c0` not supported) and the getters for DPI stages,
 the sensor, angle, Dynamic Sensitivity, battery, idle sleep and low-battery
 mode, and have the common eight buttons with the DPI button at `0x60`. The
