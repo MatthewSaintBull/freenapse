@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.2 (2026-11-17)
 
 - The Razer Viper V3 Pro SE is in the device table, from the probes its
   owner posted (issue 8): product id 0x00DF through its HyperSpeed 1000 Hz
