@@ -2,13 +2,17 @@
 
 ## Unreleased
 
-- The Razer Viper V3 Pro SE is in the device table: product id 0x00DF
-  through its HyperSpeed 1000 Hz receiver, from the probe its owner posted
-  (issue 8), and 0x00DE over the cable, from OpenRazer's device list.
-  Classic polling (125, 500, 1000 Hz), 35000 DPI, the common eight buttons,
-  no macro memory. Both rows stay read-only until an owner confirms writes
-  with the "Allow writes to this mouse" switch; the Calibration page is
-  hidden until the tracking writes have been tried.
+- The Razer Viper V3 Pro SE is in the device table, from the probes its
+  owner posted (issue 8): product id 0x00DF through its HyperSpeed 1000 Hz
+  receiver and 0x00DE over the cable. Classic polling (125, 500, 1000 Hz),
+  35000 DPI, the common eight buttons, no macro memory.
+- Through the receiver it is verified: its owner confirmed DPI stages, the
+  polling rate and button assignments on the normal and the Hypershift
+  layer, so freenapse writes to it without the "Allow writes to this mouse"
+  switch. Idle sleep, the low-battery threshold, rotation and Dynamic
+  Sensitivity were not tried on that mouse. Over the cable it stays
+  read-only until an owner confirms writes there, and the Calibration page
+  is hidden until the tracking writes have been tried.
 
 ## 0.5.1 (2026-11-16)
 
