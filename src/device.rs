@@ -108,10 +108,10 @@ pub const DEVICES: &[DeviceSpec] = &[
     // From its owner's probes over the cable and through the HyperSpeed 1000 Hz receiver (issue 8):
     // classic polling on both (00/C0 not supported), angle and Dynamic Sensitivity getters answer, the
     // common eight buttons, no macro memory, one onboard profile. That owner confirmed DPI stages,
-    // polling and button writes on both layers through the receiver; the cable was only probed.
+    // polling and button writes on both layers, through the receiver and over the cable.
     // The sensor reads answer like the Viper V3 Pro's, but nobody has tried the tracking writes, so
     // that page stays off.
-    spec!(0x00DE, "Razer Viper V3 Pro SE (wired)", wireless false, tid 0x1f, Classic, RATES_CLASSIC, dpi 35000, sensor false, pairing false, verified false),
+    spec!(0x00DE, "Razer Viper V3 Pro SE (wired)", wireless false, tid 0x1f, Classic, RATES_CLASSIC, dpi 35000, sensor false, pairing false, verified true),
     spec!(0x00DF, "Razer Viper V3 Pro SE (wireless)", wireless true, tid 0x1f, Classic, RATES_CLASSIC, dpi 35000, sensor false, pairing false, verified true),
     spec!(0x00B3, "Razer HyperPolling wireless dongle", wireless true, tid 0x1f, HyperPolling, RATES_HYPERPOLLING, dpi 30000, sensor false, pairing true, verified false),
     spec!(0x00BE, "Razer DeathAdder V4 Pro (wired)", wireless false, tid 0x1f, HyperPolling, RATES_HYPERPOLLING, dpi 45000, sensor false, pairing false, verified false),
@@ -1278,10 +1278,10 @@ mod tests {
         assert_eq!(button_name(0x0b), Some("dpi-up"));
         assert_eq!(button_name(0x61), None);
         assert_eq!(ButtonFunction::dpi_cycle().describe(), "DPI cycle");
-        // The Viper V3 Pro SE (issue 8): classic polling on both rows; verified through its receiver, the cable only probed.
+        // The Viper V3 Pro SE (issue 8): classic polling on both rows, both verified by its owner.
         for pid in [0x00DE, 0x00DF] {
             let se = DeviceSpec::find(pid).unwrap();
-            assert!(!se.sensor_tracking && !se.pairing && se.battery && se.wireless == (pid == 0x00DF) && se.verified == se.wireless);
+            assert!(!se.sensor_tracking && !se.pairing && se.battery && se.wireless == (pid == 0x00DF) && se.verified);
             assert_eq!((se.dpi_max, se.polling, se.polling_rates, se.buttons), (35000, PollingStyle::Classic, &RATES_CLASSIC[..], BUTTONS));
             assert_eq!(crate::config_file_name(se.config), "config.toml");
         }
@@ -1302,8 +1302,8 @@ mod tests {
             assert!(DEVICES[..i].iter().all(|o| o.product_id != d.product_id), "duplicate 0x{:04x}", d.product_id);
         }
         // The author's Viper V3 Pro (wired and wireless) and Basilisk V2, the Pro Click V2 Vertical (issue 4)
-        // the Basilisk V3 (issue 5) and the Viper V3 Pro SE through its receiver (issue 8).
-        assert_eq!(DEVICES.iter().filter(|d| d.verified).count(), 6);
+        // the Basilisk V3 (issue 5) and the Viper V3 Pro SE, wired and through its receiver (issue 8).
+        assert_eq!(DEVICES.iter().filter(|d| d.verified).count(), 7);
     }
 
     #[test]
