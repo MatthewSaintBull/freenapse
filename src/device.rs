@@ -148,10 +148,12 @@ pub const DEVICES: &[DeviceSpec] = &[
     // The Basilisk V3 Pro, from its owner's probes over the cable and through the Mouse Dock Pro
     // (issue 9, firmware 3.0): a battery, the Basilisk V3's 13 buttons with the same defaults, angle and
     // Dynamic Sensitivity refused, macro memory, five onboard profiles. One config file for the three links.
-    // Nobody has confirmed writes yet. Its LEDs are not listed: nobody has probed their commands.
+    // That owner confirmed DPI, polling and button writes over the cable and through the dock (4000 Hz
+    // read back; 8000 Hz, macros and profile switching were not tried); the HyperSpeed dongle row is
+    // still unverified. Its LEDs are not listed: nobody has probed their commands.
     DeviceSpec {
         config: Some("basilisk-v3-pro"),
-        ..spec!(0x00AA, "Razer Basilisk V3 Pro (wired)", wireless false, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified false, acceleration false, rotation false, buttons BASILISK_V3_BUTTONS)
+        ..spec!(0x00AA, "Razer Basilisk V3 Pro (wired)", wireless false, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified true, acceleration false, rotation false, buttons BASILISK_V3_BUTTONS)
     },
     // Through the HyperSpeed dongle: not probed, polling command from OpenRazer.
     DeviceSpec {
@@ -164,7 +166,7 @@ pub const DEVICES: &[DeviceSpec] = &[
     // list, but pairing and its LED were not tried, so they stay off.
     DeviceSpec {
         config: Some("basilisk-v3-pro"),
-        ..spec!(0x00A4, "Razer Basilisk V3 Pro (Mouse Dock Pro)", wireless true, tid 0x1f, HyperPolling, RATES_VIPER_8K, dpi 30000, sensor false, pairing false, verified false, acceleration false, rotation false, buttons BASILISK_V3_BUTTONS)
+        ..spec!(0x00A4, "Razer Basilisk V3 Pro (Mouse Dock Pro)", wireless true, tid 0x1f, HyperPolling, RATES_VIPER_8K, dpi 30000, sensor false, pairing false, verified true, acceleration false, rotation false, buttons BASILISK_V3_BUTTONS)
     },
 ];
 
@@ -1273,7 +1275,9 @@ mod tests {
         // The Basilisk V3 Pro (issue 9): cable, HyperSpeed dongle and Mouse Dock Pro are one mouse.
         for pid in [0x00AA, 0x00AB, 0x00A4] {
             let p = DeviceSpec::find(pid).unwrap();
-            assert!(!p.verified && p.battery && !p.pairing && !p.supports_acceleration && !p.supports_rotation, "{}", p.name);
+            // Its owner confirmed writes over the cable and through the dock, not the HyperSpeed dongle.
+            assert_eq!(p.verified, pid != 0x00AB, "{}", p.name);
+            assert!(p.battery && !p.pairing && !p.supports_acceleration && !p.supports_rotation, "{}", p.name);
             assert_eq!((p.dpi_max, p.buttons, p.wireless), (30000, BASILISK_V3_BUTTONS, pid != 0x00AA), "{}", p.name);
             assert_eq!(crate::config_file_name(p.config), "config-basilisk-v3-pro.toml");
         }
@@ -1303,8 +1307,8 @@ mod tests {
             assert!(DEVICES[..i].iter().all(|o| o.product_id != d.product_id), "duplicate 0x{:04x}", d.product_id);
         }
         // The author's Viper V3 Pro (wired and wireless) and Basilisk V2, the Pro Click V2 Vertical (issue 4)
-        // and the Basilisk V3 (issue 5).
-        assert_eq!(DEVICES.iter().filter(|d| d.verified).count(), 5);
+        // the Basilisk V3 (issue 5) and the Basilisk V3 Pro over its cable and the Mouse Dock Pro (issue 9).
+        assert_eq!(DEVICES.iter().filter(|d| d.verified).count(), 7);
     }
 
     #[test]
