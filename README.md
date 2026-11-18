@@ -38,7 +38,7 @@ costs its owner one command, `freenapse probe`, pasted into a
 differ a lot keep their own config file, so two of them on one PC never share
 settings.
 
-![The Customize page: button assignment with the mouse drawing](assets/screenshot-customize.png)
+![The Devices page: the connected mouse and the list of verified mice with their product ids, DPI, polling rates and button counts](assets/screenshot-devices.png)
 
 Synapse 4 on this machine runs as 11 Electron processes using about 1.5 GB of RAM
 and burns CPU while gaming. freenapse is one small native executable with no
@@ -87,7 +87,7 @@ its own profile.
 * Dongle pairing: pair, cancel, unpair and auto-pairing
 * Lighting on mice with LEDs (Basilisk V2: logo and wheel): off, static, breathing, spectrum and brightness per zone
 * Tray icon with battery percentage, DPI stage and polling rate menu, low battery notification. It reconnects the moment the dongle is plugged in or the PC wakes, writes the config file to the mouse when you edit it by hand, and once a day asks GitHub whether a newer release exists (the only network request it makes; `check_updates = false` turns it off)
-* Settings window in the style of a game client ((navigation pane with Customize / Performance / Calibration / Power / Games / Roadmap, Windows 11 style settings rows, game tiles with cover art; see DESIGN.md)): every change is written to the mouse as you make it, no apply button
+* Settings window in the style of a game client (navigation pane with Customize / Performance / Calibration / Power / Games / Devices / Roadmap, Windows 11 style settings rows, game tiles with cover art; see DESIGN.md): every change is written to the mouse as you make it, no apply button
 * Firmware versions and serial numbers of mouse and dongle
 
 ## Settings window
@@ -98,13 +98,16 @@ page in a Steam / Xbox-app style layout (navigation pane with the device
 card, a page header, flat cards of settings rows in the Fluent 2 type ramp), drawn with
 plain GDI inside the same 1 MB executable.
 
+![The Customize page: the button list with the DPI button, the mouse drawing and the function picker](assets/screenshot-customize.png)
+
 ![The Performance page: DPI stages, Dynamic Sensitivity and polling rate](assets/screenshot-performance.png)
 
-* **Customize**: pick a layer (Normal, Hypershift, or one per game), click a button in the list or on the mouse drawing, pick a function (default, mouse button or double-click, keyboard key with modifiers, DPI stage/cycle, media key, system sleep / power / wake, macro with its playback option, Hypershift, disabled). Mouse and keyboard functions have a Turbo toggle with a repeat rate. The MACROS section below records new macros (Stop or Esc ends the recording), renames and deletes them, and shows the macro memory left in the mouse.
+* **Customize**: pick a layer (Normal, Hypershift, or one per game), click a button in the list or on the mouse drawing, pick a function (default, mouse button or double-click, keyboard key with modifiers, DPI stage/cycle, media key, system sleep / power / wake, macro with its playback option, program, text, Hypershift, disabled). Mouse and keyboard functions have a Turbo toggle with a repeat rate. The MACROS section below records new macros (Stop or Esc ends the recording), renames and deletes them, and shows the macro memory left in the mouse.
 * **Performance**: DPI stages (enable, count, value per stage via slider or typed, active stage, independent X and Y), Dynamic Sensitivity with the three presets and a drag-the-points curve editor, polling rate, sensor rotation.
 * **Games**: your game profiles as tiles (click one to set its DPI stage, polling rate, name and program, or jump to its button layout) and the installed games found in the launchers as a grid of cover tiles (Steam's library art, Xbox logos, otherwise the program's icon on a generated tile) with launcher filter chips and a search box: click a game to create its profile. The "Add a program" tile opens a file dialog for anything else. Below, the in-game polling rate that profiles use by default.
 * **Calibration**: Smart Tracking (1, 2 or 3 mm) or the asymmetric cut-off with Synapse's lift-off and landing level sliders. The page is shown for mice with the Focus Pro tracking page. Surface calibration and mouse-mat presets are not offered by Synapse for the mouse it is verified on (the Viper V3 Pro), so they are not here either.
 * **Power**: battery, notification threshold, idle sleep, low power mode, dongle LED.
+* **Devices**: the connected mouse and every mouse in the device table, grouped as verified, being tested and read-only, with product ids, DPI ceiling, polling rates and button count. For a connected mouse that is not verified yet, the "Allow writes to this mouse" switch is here.
 * **Roadmap**: every Synapse feature with its status (done, partial, not yet, out of scope) and what the next releases aim for; the same content as ROADMAP.md.
 * The gear opens app settings: start at login, battery refresh, re-import from the mouse, re-apply everything, onboard profile selector, dongle pairing (pair, cancel, unpair, auto-pairing), device info.
 
