@@ -64,7 +64,7 @@ the unverified rows come from OpenRazer's device list.
 | Basilisk V2 (wired) | 0x0085 | 0x1f | classic `00/05` | 125, 500, 1000 | 20000 | — | — | the author |
 | Basilisk V3 (wired) | 0x0099 | 0x1f | classic `00/05` | 125, 500, 1000 | 26000 | — | — | YiQuSi (issue 5) |
 | Basilisk V3 Pro, wired / HyperSpeed dongle | 0x00AA / 0x00AB | 0x1f | classic | 125, 500, 1000 | 30000 | ❓ | — | nobody yet (wired probed, issue 9) |
-| Basilisk V3 Pro, Mouse Dock Pro | 0x00A4 | 0x1f | HyperPolling | 125, 500 .. 4000 | 30000 | ❓ | ❓ | nobody yet (probed, issue 9) |
+| Basilisk V3 Pro, Mouse Dock Pro | 0x00A4 | 0x1f | HyperPolling | 125, 500 .. 8000 | 30000 | ❓ | ❓ | nobody yet (probed, issue 9) |
 | Any other Razer mouse (vendor 0x1532, 90-byte control report) | — | 0x1f | classic | 125, 500, 1000 | 30000 | — | — | read-only; `freenapse probe` |
 
 "Tracking page" is the Focus Pro lift-off page of `src/sensor.rs`; ❓ means
@@ -115,8 +115,9 @@ through the Mouse Dock Pro in
 3.0); nobody has confirmed writes yet, so it is read-only. The dock has its
 own product id, 0x00A4, and its paired list names the mouse (0x00AB). Over
 the cable the classic polling command answers and the HyperPolling one is
-not supported; through the dock it is the other way round. The dock's rates
-(up to 4000 Hz) are Razer's specification, not read back. Same 13 buttons
+not supported; through the dock it is the other way round. Its owner set
+4000 Hz through the dock and read it back; 8000 Hz is Razer's specification
+for the dock and was not tried. Same 13 buttons
 and defaults as the Basilisk V3 (`BASILISK_V3_BUTTONS`), a battery, idle
 sleep and low-battery mode, angle and Dynamic Sensitivity refused, macro
 memory (ids up to 100, 311296 bytes), five onboard profiles. The dock

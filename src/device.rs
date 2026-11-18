@@ -23,9 +23,7 @@ pub const RATES_HYPERPOLLING: [u16; 7] = [125, 250, 500, 1000, 2000, 4000, 8000]
 pub const RATES_CLASSIC: [u16; 3] = [125, 500, 1000];
 /// What the HyperPolling command carries on a wired link (the Viper Mini SE, per OpenRazer).
 const RATES_HYPERPOLLING_WIRED: [u16; 3] = [125, 500, 1000];
-/// The extended command through a 4000 Hz receiver (the Mouse Dock Pro).
-const RATES_HYPERPOLLING_4K: [u16; 5] = [125, 500, 1000, 2000, 4000];
-/// The Viper 8KHz: the extended command without 250 Hz (OpenRazer).
+/// The extended command without 250 Hz: the Viper 8KHz (OpenRazer) and the Mouse Dock Pro.
 const RATES_VIPER_8K: [u16; 6] = [125, 500, 1000, 2000, 4000, 8000];
 
 /// Which polling-rate command a mouse answers.
@@ -161,12 +159,12 @@ pub const DEVICES: &[DeviceSpec] = &[
         ..spec!(0x00AB, "Razer Basilisk V3 Pro (wireless)", wireless true, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified false, acceleration false, rotation false, buttons BASILISK_V3_BUTTONS)
     },
     // The Mouse Dock Pro's own product id (its paired list names the mouse, 0x00AB): the probe
-    // answered the HyperPolling getter and refused the classic one. The rates are the dock's 4000 Hz
-    // range from Razer's specification, not yet read back. The dock answers the paired list, but
-    // pairing and its LED were not tried, so they stay off.
+    // answered the HyperPolling getter and refused the classic one. Its owner set 4000 Hz and read it
+    // back; 8000 Hz is Razer's specification for the dock, not yet tried. The dock answers the paired
+    // list, but pairing and its LED were not tried, so they stay off.
     DeviceSpec {
         config: Some("basilisk-v3-pro"),
-        ..spec!(0x00A4, "Razer Basilisk V3 Pro (Mouse Dock Pro)", wireless true, tid 0x1f, HyperPolling, RATES_HYPERPOLLING_4K, dpi 30000, sensor false, pairing false, verified false, acceleration false, rotation false, buttons BASILISK_V3_BUTTONS)
+        ..spec!(0x00A4, "Razer Basilisk V3 Pro (Mouse Dock Pro)", wireless true, tid 0x1f, HyperPolling, RATES_VIPER_8K, dpi 30000, sensor false, pairing false, verified false, acceleration false, rotation false, buttons BASILISK_V3_BUTTONS)
     },
 ];
 
@@ -1280,7 +1278,7 @@ mod tests {
             assert_eq!(crate::config_file_name(p.config), "config-basilisk-v3-pro.toml");
         }
         let dock = DeviceSpec::find(0x00A4).unwrap();
-        assert_eq!((dock.polling, dock.rates_text().as_str()), (PollingStyle::HyperPolling, "125/500/1000/2000/4000"));
+        assert_eq!((dock.polling, dock.rates_text().as_str()), (PollingStyle::HyperPolling, "125/500/1000/2000/4000/8000"));
         assert_eq!(DeviceSpec::find(0x00AA).unwrap().polling, PollingStyle::Classic);
         assert_eq!(v3.buttons.iter().find(|b| b.name == "dpi").map(|b| b.default), Some(ButtonFunction::dpi_cycle()));
         assert_eq!(BUTTONS[7], PhysicalButton { name: "dpi", code: 0x60, default: ButtonFunction::dpi_cycle() });

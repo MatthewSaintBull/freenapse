@@ -4,7 +4,7 @@
 
 - The Razer Basilisk V3 Pro through the Mouse Dock Pro (product id 0x00A4)
   is in the device table, from the probes its owner posted (issue 9): the
-  HyperPolling command up to 4000 Hz instead of the classic one. It was
+  HyperPolling command up to 8000 Hz instead of the classic one. It was
   opened as an unlisted mouse before.
 - The Basilisk V3 Pro rows (cable 0x00AA, HyperSpeed dongle 0x00AB, dock)
   get what the probes showed: the Basilisk V3's 13 buttons with the
