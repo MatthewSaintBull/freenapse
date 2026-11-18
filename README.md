@@ -25,8 +25,9 @@ writes only to the rows an owner of that mouse has verified:
 | **Pro Click V2 Vertical** through the HyperSpeed dongle | verified |
 | **Basilisk V3** (all 13 buttons with the scroll-mode button; no lighting yet) | verified |
 | **Viper V3 Pro SE**, wired and through its HyperSpeed receiver | verified |
+| **Basilisk V3 Pro**, wired or through the Mouse Dock Pro (all 13 buttons; no lighting yet) | verified |
 | DeathAdder V3 Pro, wired | being tested by its owner |
-| DeathAdder V4 Pro, DeathAdder V3, Viper V2 Pro, Viper V3 HyperSpeed, Viper Mini SE, Viper 8KHz, Cobra Pro, Basilisk V3 Pro | listed, read-only until an owner confirms them |
+| DeathAdder V4 Pro, DeathAdder V3, Viper V2 Pro, Viper V3 HyperSpeed, Viper Mini SE, Viper 8KHz, Cobra Pro, Basilisk V3 Pro through the HyperSpeed dongle | listed, read-only until an owner confirms them |
 | Any other Razer mouse | opens read-only |
 
 The full table is under [Supported mice](FEATURES.md#supported-mice) and on
