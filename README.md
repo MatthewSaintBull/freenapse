@@ -5,7 +5,10 @@
 
 # freenapse
 
+[![Support me on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I5P22AGI8D)
+
 [![CI](https://github.com/MatthewSaintBull/freenapse/actions/workflows/ci.yml/badge.svg)](https://github.com/MatthewSaintBull/freenapse/actions/workflows/ci.yml)
+
 
 A tiny Rust replacement for Razer Synapse for **Razer mice** on Windows: one
 small executable that keeps DPI, polling rate, buttons, macros, sensor, power
@@ -21,6 +24,7 @@ writes only to the rows an owner of that mouse has verified:
 | **Basilisk V2** (all 13 buttons, onboard macros, logo and wheel lighting) | verified |
 | **Pro Click V2 Vertical** through the HyperSpeed dongle | verified |
 | **Basilisk V3** (all 13 buttons with the scroll-mode button; no lighting yet) | verified |
+| **Viper V3 Pro SE**, wired and through its HyperSpeed receiver | verified |
 | **Basilisk V3 Pro**, wired or through the Mouse Dock Pro (all 13 buttons; no lighting yet) | verified |
 | DeathAdder V3 Pro, wired | being tested by its owner |
 | DeathAdder V4 Pro, DeathAdder V3, Viper V2 Pro, Viper V3 HyperSpeed, Viper Mini SE, Viper 8KHz, Cobra Pro, Basilisk V3 Pro through the HyperSpeed dongle | listed, read-only until an owner confirms them |

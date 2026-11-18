@@ -105,6 +105,14 @@ macro_rules! spec {
 pub const DEVICES: &[DeviceSpec] = &[
     spec!(0x00C0, "Razer Viper V3 Pro (wired)", wireless false, tid 0x1f, Classic, RATES_CLASSIC, dpi 35000, sensor true, pairing false, verified true),
     spec!(0x00C1, "Razer Viper V3 Pro (wireless)", wireless true, tid 0x1f, HyperPolling, RATES_HYPERPOLLING, dpi 35000, sensor true, pairing true, verified true),
+    // From its owner's probes over the cable and through the HyperSpeed 1000 Hz receiver (issue 8):
+    // classic polling on both (00/C0 not supported), angle and Dynamic Sensitivity getters answer, the
+    // common eight buttons, no macro memory, one onboard profile. That owner confirmed DPI stages,
+    // polling and button writes on both layers, through the receiver and over the cable.
+    // The sensor reads answer like the Viper V3 Pro's, but nobody has tried the tracking writes, so
+    // that page stays off.
+    spec!(0x00DE, "Razer Viper V3 Pro SE (wired)", wireless false, tid 0x1f, Classic, RATES_CLASSIC, dpi 35000, sensor false, pairing false, verified true),
+    spec!(0x00DF, "Razer Viper V3 Pro SE (wireless)", wireless true, tid 0x1f, Classic, RATES_CLASSIC, dpi 35000, sensor false, pairing false, verified true),
     spec!(0x00B3, "Razer HyperPolling wireless dongle", wireless true, tid 0x1f, HyperPolling, RATES_HYPERPOLLING, dpi 30000, sensor false, pairing true, verified false),
     spec!(0x00BE, "Razer DeathAdder V4 Pro (wired)", wireless false, tid 0x1f, HyperPolling, RATES_HYPERPOLLING, dpi 45000, sensor false, pairing false, verified false),
     spec!(0x00BF, "Razer DeathAdder V4 Pro (wireless)", wireless true, tid 0x1f, HyperPolling, RATES_HYPERPOLLING, dpi 45000, sensor false, pairing true, verified false),
@@ -179,6 +187,12 @@ impl DeviceSpec {
     /// The table row, or the generic fallback for a Razer mouse that is not listed.
     pub fn lookup(product_id: u16) -> DeviceSpec {
         let spec = DeviceSpec::find(product_id).cloned().unwrap_or_else(|| DeviceSpec::unknown(product_id));
+        // Debug builds only: FREENAPSE_TREAT_UNLISTED=1 opens the mouse as one that is not in
+        // the table (the generic fallback row), to try that path without owning such a mouse.
+        #[cfg(all(debug_assertions, not(test)))]
+        if std::env::var_os("FREENAPSE_TREAT_UNLISTED").is_some() {
+            return DeviceSpec::unknown(product_id);
+        }
         // Debug builds only: FREENAPSE_TREAT_UNVERIFIED=1 opens a verified mouse as an
         // unverified one, to try the read-only path and the Devices page's switch on it.
         #[cfg(all(debug_assertions, not(test)))]
@@ -660,7 +674,14 @@ impl Mouse {
     }
 
     pub fn open_with(allow_unverified: bool) -> Result<Mouse> {
-        let known: Vec<u16> = DEVICES.iter().map(|d| d.product_id).collect();
+        #[allow(unused_mut)]
+        let mut known: Vec<u16> = DEVICES.iter().map(|d| d.product_id).collect();
+        // Debug builds only (see `DeviceSpec::lookup`): no listed id, so the mouse is found
+        // the way an unlisted one is.
+        #[cfg(all(debug_assertions, not(test)))]
+        if std::env::var_os("FREENAPSE_TREAT_UNLISTED").is_some() {
+            known.clear();
+        }
         let mut candidates: Vec<Mouse> = HidDevice::open_controls(VENDOR_RAZER, &known).into_iter().map(|hid| Mouse::from_hid(hid, allow_unverified)).collect();
         let mouse = match candidates.len() {
             0 => {
@@ -1290,6 +1311,13 @@ mod tests {
         assert_eq!(button_name(0x0b), Some("dpi-up"));
         assert_eq!(button_name(0x61), None);
         assert_eq!(ButtonFunction::dpi_cycle().describe(), "DPI cycle");
+        // The Viper V3 Pro SE (issue 8): classic polling on both rows, both verified by its owner.
+        for pid in [0x00DE, 0x00DF] {
+            let se = DeviceSpec::find(pid).unwrap();
+            assert!(!se.sensor_tracking && !se.pairing && se.battery && se.wireless == (pid == 0x00DF) && se.verified);
+            assert_eq!((se.dpi_max, se.polling, se.polling_rates, se.buttons), (35000, PollingStyle::Classic, &RATES_CLASSIC[..], BUTTONS));
+            assert_eq!(crate::config_file_name(se.config), "config.toml");
+        }
         // A row that names no file keeps config.toml; the Basilisk V2 has its own file and no battery.
         let b = DeviceSpec::find(0x0085).unwrap();
         assert!(b.verified && !b.battery && b.lighting.len() == 2);
@@ -1307,8 +1335,9 @@ mod tests {
             assert!(DEVICES[..i].iter().all(|o| o.product_id != d.product_id), "duplicate 0x{:04x}", d.product_id);
         }
         // The author's Viper V3 Pro (wired and wireless) and Basilisk V2, the Pro Click V2 Vertical (issue 4)
-        // the Basilisk V3 (issue 5) and the Basilisk V3 Pro over its cable and the Mouse Dock Pro (issue 9).
-        assert_eq!(DEVICES.iter().filter(|d| d.verified).count(), 7);
+        // the Basilisk V3 (issue 5), the Viper V3 Pro SE, wired and through its receiver (issue 8),
+        // and the Basilisk V3 Pro over its cable and the Mouse Dock Pro (issue 9).
+        assert_eq!(DEVICES.iter().filter(|d| d.verified).count(), 9);
     }
 
     #[test]
