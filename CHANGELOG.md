@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.3 (2026-11-18)
 
 - The Razer Basilisk V3 Pro is verified over its cable (product id 0x00AA)
   and through the Mouse Dock Pro (0x00A4): its owner confirmed DPI stages,
