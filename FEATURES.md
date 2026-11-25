@@ -49,6 +49,8 @@ the unverified rows come from OpenRazer's device list.
 |---|---|---|---|---|---|---|---|---|
 | Viper V3 Pro, wired | 0x00C0 | 0x1f | classic `00/05` | 125, 500, 1000 | 35000 | ✅ | — | the author |
 | Viper V3 Pro, HyperSpeed / HyperPolling dongle | 0x00C1 | 0x1f | HyperPolling `00/40` | 125 .. 8000 | 35000 | ✅ | ✅ | the author |
+| Viper V3 Pro SE, wired | 0x00DE | 0x1f | classic `00/05` | 125, 500, 1000 | 35000 | ❓ | — | yumo953 (issue 8) |
+| Viper V3 Pro SE, HyperSpeed 1000 Hz receiver | 0x00DF | 0x1f | classic `00/05` | 125, 500, 1000 | 35000 | ❓ | — | yumo953 (issue 8) |
 | HyperPolling wireless dongle (standalone) | 0x00B3 | 0x1f | HyperPolling | 125 .. 8000 | 30000 | ❓ | ✅ | nobody yet |
 | DeathAdder V4 Pro, wired / wireless | 0x00BE / 0x00BF | 0x1f | HyperPolling | 125 .. 8000 | 45000 | ❓ | wireless | nobody yet |
 | DeathAdder V3 Pro, wired | 0x00B6 | 0x1f | classic `00/05` | 125, 500, 1000 | 30000 | ❓ (smart lift only) | — | — |
@@ -63,7 +65,9 @@ the unverified rows come from OpenRazer's device list.
 | Pro Click V2 Vertical, wired | 0x00C7 | 0x1f | classic | 125, 500, 1000 | 30000 | ❓ | — | nobody yet (shares the dongle row's config file) |
 | Basilisk V2 (wired) | 0x0085 | 0x1f | classic `00/05` | 125, 500, 1000 | 20000 | — | — | the author |
 | Basilisk V3 (wired) | 0x0099 | 0x1f | classic `00/05` | 125, 500, 1000 | 26000 | — | — | YiQuSi (issue 5) |
-| Basilisk V3 Pro, wired / wireless | 0x00AA / 0x00AB | 0x1f | classic | 125, 500, 1000 | 30000 | ❓ | — | nobody yet |
+| Basilisk V3 Pro, wired | 0x00AA | 0x1f | classic `00/05` | 125, 500, 1000 | 30000 | ❓ | — | eXtreme (issue 9) |
+| Basilisk V3 Pro, Mouse Dock Pro | 0x00A4 | 0x1f | HyperPolling `00/40` | 125, 500 .. 8000 | 30000 | ❓ | ❓ | eXtreme (issue 9) |
+| Basilisk V3 Pro, HyperSpeed dongle | 0x00AB | 0x1f | classic | 125, 500, 1000 | 30000 | ❓ | — | nobody yet |
 | Any other Razer mouse (vendor 0x1532, 90-byte control report) | — | 0x1f | classic | 125, 500, 1000 | 30000 | — | — | read-only; `freenapse probe` |
 
 "Tracking page" is the Focus Pro lift-off page of `src/sensor.rs`; ❓ means
@@ -107,6 +111,42 @@ do not exist. The scroll-mode function and the wheel-left / wheel-right
 repeats have no config value yet, so they can only be kept as the default.
 Lighting (logo, wheel, underglow) is not listed: its commands have not been
 probed. It keeps its settings in `config-basilisk-v3.toml`.
+
+**Viper V3 Pro SE.** Listed from its owner's probes in
+[issue #8](https://github.com/MatthewSaintBull/freenapse/issues/8) (firmware
+1.0), through the HyperSpeed 1000 Hz receiver and over the cable, and
+verified by that owner on both: DPI stages, polling rate and button
+assignments on both layers, with the same writes accepted either way. Idle
+sleep, the low-battery threshold, rotation and Dynamic Sensitivity were not
+tried. Both links answer the classic
+polling command only (`00/c0` not supported) and the getters for DPI stages,
+the sensor, angle, Dynamic Sensitivity, battery, idle sleep and low-battery
+mode, and have the common eight buttons with the DPI button at `0x60`. The
+35000 DPI maximum is OpenRazer's figure. No macro memory, one onboard
+profile. The receiver answers the paired list (`00/bf`, tid ff) but not the
+dongle firmware or serial; over the cable it is the other way round. The
+sensor reads look like the Viper V3 Pro's, but the tracking writes have not
+been tried, so the Calibration page stays hidden. Razer sells a HyperPolling
+dongle for it separately; nobody has probed the mouse through that one.
+
+**Basilisk V3 Pro.** Listed from its owner's probes over the cable and
+through the Mouse Dock Pro in
+[issue #9](https://github.com/MatthewSaintBull/freenapse/issues/9) (firmware
+3.0) and verified by that owner on those two links: DPI stages, polling
+rate and a button assignment. Onboard macros and profile switching were not
+tried. The dock has its
+own product id, 0x00A4, and its paired list names the mouse (0x00AB). Over
+the cable the classic polling command answers and the HyperPolling one is
+not supported; through the dock it is the other way round. Its owner set
+4000 Hz through the dock and read it back; 8000 Hz is Razer's specification
+for the dock and was not tried. Same 13 buttons
+and defaults as the Basilisk V3 (`BASILISK_V3_BUTTONS`), a battery, idle
+sleep and low-battery mode, angle and Dynamic Sensitivity refused, macro
+memory (ids up to 100, 311296 bytes), five onboard profiles. The dock
+answers the paired list `00/bf`, but pairing and the dock's LED were not
+tried, so the pairing controls stay hidden. The HyperSpeed dongle row
+(0x00AB) has not been probed and stays read-only. Lighting is not listed. The three links share
+`config-basilisk-v3-pro.toml`.
 
 **DeathAdder V3 Pro, wired.** Being tested by its owner (issue #2 above).
 The 30000 DPI limit follows [Razer's Focus Pro 30K specification](https://mysupport.razer.com/app/answers/detail/a_id/6125/kw/mice).
