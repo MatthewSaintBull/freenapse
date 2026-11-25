@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+- The Razer Viper V2 Pro is verified through its bundled receiver (product
+  id 0x00A6): its owner confirmed DPI stages, the polling rate, idle sleep,
+  the low-battery threshold and a button assignment (issue 6), so freenapse
+  writes to it without the "Allow writes to this mouse" switch. Over the
+  cable (0x00A5) it stays read-only.
+- `freenapse apply` no longer stops with "device returned status Failure" on
+  the Viper V2 Pro: the mouse has no sensor rotation and no Dynamic
+  Sensitivity, and its rows said it had both. Those two settings are now
+  left out for it, and their controls are hidden.
+- The wheel of the Viper V2 Pro is no longer listed as two buttons. The
+  mouse reports no function for scroll up and scroll down, so `import` wrote
+  them as "disabled" while the wheel kept scrolling.
+- On any unverified mouse opened up for testing, a refused Dynamic
+  Sensitivity read no longer aborts the apply: that setting is skipped and
+  the rest of the config is written.
+
 ## 0.5.3 (2026-11-18)
 
 - The Razer Basilisk V3 Pro is verified over its cable (product id 0x00AA)
