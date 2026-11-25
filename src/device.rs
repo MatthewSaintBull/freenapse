@@ -119,9 +119,13 @@ pub const DEVICES: &[DeviceSpec] = &[
     spec!(0x00B6, "Razer DeathAdder V3 Pro (wired)", wireless false, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified false, acceleration false, rotation false),
     spec!(0x00B7, "Razer DeathAdder V3 Pro (wireless)", wireless true, tid 0x1f, Classic, RATES_CLASSIC, dpi 35000, sensor false, pairing false, verified false),
     spec!(0x00B2, "Razer DeathAdder V3", wireless false, tid 0x1f, HyperPolling, RATES_HYPERPOLLING, dpi 30000, sensor false, pairing false, verified false),
-    // Firmware 2.1 answers Failure to the acceleration and angle getters (issue #6).
-    spec!(0x00A5, "Razer Viper V2 Pro (wired)", wireless false, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified false, acceleration false, rotation false),
-    spec!(0x00A6, "Razer Viper V2 Pro (wireless)", wireless true, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified false, acceleration false, rotation false),
+    // From its owner's probe through the bundled receiver (issue 6, firmware 2.1): the acceleration and
+    // angle getters answer Failure, no macro memory, one onboard profile, the wheel is not assignable.
+    // That owner confirmed DPI stages, polling, idle sleep, the low-battery threshold and a button
+    // assignment through the receiver; the Hypershift layer was not tried. The cable row follows the
+    // receiver's and has not been probed.
+    spec!(0x00A5, "Razer Viper V2 Pro (wired)", wireless false, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified false, acceleration false, rotation false, buttons VIPER_V2_PRO_BUTTONS),
+    spec!(0x00A6, "Razer Viper V2 Pro (wireless)", wireless true, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified true, acceleration false, rotation false, buttons VIPER_V2_PRO_BUTTONS),
     spec!(0x00B8, "Razer Viper V3 HyperSpeed", wireless true, tid 0x1f, Classic, RATES_CLASSIC, dpi 30000, sensor false, pairing false, verified false),
     spec!(0x009E, "Razer Viper Mini SE (wired)", wireless false, tid 0x1f, HyperPolling, RATES_HYPERPOLLING_WIRED, dpi 30000, sensor false, pairing false, verified false),
     spec!(0x009F, "Razer Viper Mini SE (wireless)", wireless true, tid 0x1f, HyperPolling, RATES_HYPERPOLLING, dpi 30000, sensor false, pairing true, verified false),
@@ -634,7 +638,19 @@ pub const BASILISK_V3_BUTTONS: &[PhysicalButton] = &[
     PhysicalButton { name: "profile", code: 0x0e, default: ButtonFunction([0x07, 1, 0x04, 0, 0, 0, 0]) },
 ];
 
-const BUTTON_LISTS: [&[PhysicalButton]; 3] = [BUTTONS, BASILISK_V2_BUTTONS, BASILISK_V3_BUTTONS];
+/// The Viper V2 Pro, from its owner's probe (issue 6): the five clicks and the DPI button.
+/// The wheel is left out: codes 0x09 and 0x0a answer with no function stored while the
+/// wheel scrolls, so they are not buttons this mouse lets anyone assign.
+pub const VIPER_V2_PRO_BUTTONS: &[PhysicalButton] = &[
+    clicks("left", 0x01),
+    clicks("right", 0x02),
+    clicks("middle", 0x03),
+    clicks("back", 0x04),
+    clicks("forward", 0x05),
+    PhysicalButton { name: "dpi", code: 0x60, default: ButtonFunction([0x06, 1, 0x06, 0, 0, 0, 0]) },
+];
+
+const BUTTON_LISTS: [&[PhysicalButton]; 4] = [BUTTONS, BASILISK_V2_BUTTONS, BASILISK_V3_BUTTONS, VIPER_V2_PRO_BUTTONS];
 
 /// A physical button by config name, on any mouse in the table.
 pub fn physical_button(name: &str) -> Option<&'static PhysicalButton> {
@@ -1288,6 +1304,16 @@ mod tests {
         }
         assert_eq!(&BASILISK_V2_BUTTONS[..7], &BUTTONS[..7], "the art and the config expect the seven clicks first");
         assert_eq!(&BASILISK_V3_BUTTONS[..7], &BUTTONS[..7]);
+        // The Viper V2 Pro (issue 6): no assignable wheel, so the five clicks and the DPI button;
+        // verified through its receiver only.
+        assert_eq!(&VIPER_V2_PRO_BUTTONS[..5], &BUTTONS[..5], "the art expects the five clicks first");
+        assert!(VIPER_V2_PRO_BUTTONS.iter().all(|b| b.name != "scroll-up" && b.name != "scroll-down"));
+        let (cable, receiver) = (DeviceSpec::find(0x00A5).unwrap(), DeviceSpec::find(0x00A6).unwrap());
+        assert!(receiver.verified && !cable.verified);
+        for p in [cable, receiver] {
+            assert!(!p.supports_acceleration && !p.supports_rotation, "{}", p.name);
+            assert_eq!(p.buttons, VIPER_V2_PRO_BUTTONS, "{}", p.name);
+        }
         // The Basilisk V3 (issue 5): listed from a probe, writes confirmed by its owner.
         let v3 = DeviceSpec::find(0x0099).unwrap();
         assert!(v3.verified && !v3.wireless && !v3.battery && !v3.supports_acceleration && !v3.supports_rotation);
@@ -1337,8 +1363,9 @@ mod tests {
         }
         // The author's Viper V3 Pro (wired and wireless) and Basilisk V2, the Pro Click V2 Vertical (issue 4)
         // the Basilisk V3 (issue 5), the Viper V3 Pro SE, wired and through its receiver (issue 8),
-        // and the Basilisk V3 Pro over its cable and the Mouse Dock Pro (issue 9).
-        assert_eq!(DEVICES.iter().filter(|d| d.verified).count(), 9);
+        // the Basilisk V3 Pro over its cable and the Mouse Dock Pro (issue 9),
+        // and the Viper V2 Pro through its receiver (issue 6).
+        assert_eq!(DEVICES.iter().filter(|d| d.verified).count(), 10);
     }
 
     #[test]

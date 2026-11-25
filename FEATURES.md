@@ -56,7 +56,8 @@ the unverified rows come from OpenRazer's device list.
 | DeathAdder V3 Pro, wired | 0x00B6 | 0x1f | classic `00/05` | 125, 500, 1000 | 30000 | ❓ (smart lift only) | — | — |
 | DeathAdder V3 Pro, wireless | 0x00B7 | 0x1f | classic | 125, 500, 1000 | 35000 | ❓ | — | nobody yet |
 | DeathAdder V3 (wired, 8K) | 0x00B2 | 0x1f | HyperPolling | 125 .. 8000 | 30000 | ❓ | — | nobody yet |
-| Viper V2 Pro, wired / wireless | 0x00A5 / 0x00A6 | 0x1f | classic | 125, 500, 1000 | 30000 | ❓ | — | nobody yet |
+| Viper V2 Pro, bundled receiver | 0x00A6 | 0x1f | classic `00/05` | 125, 500, 1000 | 30000 | ❓ | — | systmrrr (issue 6) |
+| Viper V2 Pro, wired | 0x00A5 | 0x1f | classic | 125, 500, 1000 | 30000 | ❓ | — | nobody yet |
 | Viper V3 HyperSpeed | 0x00B8 | 0x1f | classic | 125, 500, 1000 | 30000 | ❓ | — | nobody yet |
 | Viper Mini SE, wired / wireless | 0x009E / 0x009F | 0x1f | HyperPolling | 125, 500, 1000 / 125 .. 8000 | 30000 | ❓ | wireless | nobody yet |
 | Viper 8KHz | 0x0091 | 0xff | HyperPolling | 125, 500 .. 8000 | 20000 | ❓ | — | nobody yet |
@@ -158,12 +159,16 @@ on a wired Viper V3 Pro but fails if a classic-polling mouse switches to it.
 
 **Viper V2 Pro.** Probed by its owner through the bundled receiver in
 [issue #6](https://github.com/MatthewSaintBull/freenapse/issues/6) (firmware
-2.1). The angle and Dynamic Sensitivity getters answer Failure, so those
-commands and controls are disabled on both rows; the wired row follows the
-wireless one and has not been probed. One onboard profile, no macro memory
-(macros are played in software), six buttons. A DPI write was confirmed by
-the owner; the other writes are still to be reported, so both rows stay
-unverified.
+2.1) and verified by that owner on the same link: DPI stages, polling rate,
+idle sleep, the low-battery threshold and a button assignment. The Hypershift
+layer was not tried. The angle and Dynamic Sensitivity getters answer Failure,
+so those commands and controls are disabled on both rows. One onboard
+profile, no macro memory (macros are played in software). Its six buttons are
+in `VIPER_V2_PRO_BUTTONS`: the five clicks and the DPI button. The wheel is
+not listed: codes `0x09` and `0x0a` answer with no function stored while the
+wheel scrolls, so a `scroll-up` or `scroll-down` line in the config is
+ignored on this mouse. The wired row follows the wireless one, has not been
+probed and stays read-only.
 
 **Pro Click V2 Vertical.** Verified by its owner through the HyperSpeed
 dongle in [issue #4](https://github.com/MatthewSaintBull/freenapse/issues/4):

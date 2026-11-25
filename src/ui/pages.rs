@@ -1685,12 +1685,20 @@ fn mouse_regions(f: &Form, x: i32, y: i32, w: i32, h: i32, buttons: &[crate::dev
         (0, r(l, g.top, g.w / 2, split - g.top)),
         (1, r(g.cx, g.top, g.w / 2, split - g.top)),
         (2, r(g.cx - wheel_w / 2, wheel_y, wheel_w, wheel_h)),
-        (5, r(g.cx - wheel_w / 2 - 4, wheel_y - 18, wheel_w + 8, 18)),
-        (6, r(g.cx - wheel_w / 2 - 4, wheel_y + wheel_h, wheel_w + 8, 18)),
         (3, r(l - 14, g.top + g.h * 48 / 100, 20, g.h * 12 / 100)),
         (4, r(l - 14, g.top + g.h * 34 / 100, 20, g.h * 12 / 100)),
     ]);
+    // The wheel's two directions, on the mice that let them be assigned.
+    let (up, down) = wheel_buttons(buttons);
+    v.extend(up.map(|i| (i, r(g.cx - wheel_w / 2 - 4, wheel_y - 18, wheel_w + 8, 18))));
+    v.extend(down.map(|i| (i, r(g.cx - wheel_w / 2 - 4, wheel_y + wheel_h, wheel_w + 8, 18))));
     v
+}
+
+/// The indices of scroll up and scroll down in a mouse's button list, when it has them.
+fn wheel_buttons(buttons: &[crate::device::PhysicalButton]) -> (Option<usize>, Option<usize>) {
+    let at = |name: &str| buttons.iter().position(|b| b.name == name);
+    (at("scroll-up"), at("scroll-down"))
 }
 
 /// Where the buttons beyond the seven clicks sit on the drawing, in unscaled
@@ -1775,8 +1783,13 @@ pub unsafe fn draw_mouse(ui: &Ui, dc: HDC, r: &RECT, highlight: usize, regions: 
         let (y0, y1) = if up { (dy(wheel_y - 6), dy(wheel_y - 14)) } else { (dy(wheel_y + wheel_h + 6), dy(wheel_y + wheel_h + 14)) };
         polygon(dc, &[POINT { x: cx - s(6), y: y0 }, POINT { x: cx + s(6), y: y0 }, POINT { x: cx, y: y1 }], Some(col), None);
     };
-    arrow(true, if highlight == 5 { ACCENT } else { rgb(0x66, 0x66, 0x66) });
-    arrow(false, if highlight == 6 { ACCENT } else { rgb(0x66, 0x66, 0x66) });
+    let (scroll_up, scroll_down) = wheel_buttons(ui.buttons());
+    if let Some(i) = scroll_up {
+        arrow(true, if highlight == i { ACCENT } else { rgb(0x66, 0x66, 0x66) });
+    }
+    if let Some(i) = scroll_down {
+        arrow(false, if highlight == i { ACCENT } else { rgb(0x66, 0x66, 0x66) });
+    }
 
     // Side buttons (left side of the mouse): forward above back.
     for (i, frac) in [(4usize, 34), (3usize, 48)] {
@@ -1809,9 +1822,13 @@ pub unsafe fn draw_mouse(ui: &Ui, dc: HDC, r: &RECT, highlight: usize, regions: 
     label(0, "Left click", POINT { x: dx(l + 4), y: dy(g.top + g.h * 24 / 100) }, true);
     label(4, "Forward", POINT { x: dx(l - 4), y: dy(g.top + g.h * 40 / 100) }, true);
     label(3, "Back", POINT { x: dx(l - 4), y: dy(g.top + g.h * 54 / 100) }, true);
-    label(5, "Scroll up", POINT { x: dx(g.cx + 6), y: dy(wheel_y - 10) }, false);
+    if let Some(i) = scroll_up {
+        label(i, "Scroll up", POINT { x: dx(g.cx + 6), y: dy(wheel_y - 10) }, false);
+    }
     label(2, "Middle click", POINT { x: dx(g.cx + wheel_w / 2), y: dy(wheel_y + wheel_h / 2) }, false);
-    label(6, "Scroll down", POINT { x: dx(g.cx + 6), y: dy(wheel_y + wheel_h + 10) }, false);
+    if let Some(i) = scroll_down {
+        label(i, "Scroll down", POINT { x: dx(g.cx + 6), y: dy(wheel_y + wheel_h + 10) }, false);
+    }
     label(1, "Right click", POINT { x: dx(rt - 6), y: dy(g.top + g.h * 38 / 100) }, false);
     let _ = regions;
 }
