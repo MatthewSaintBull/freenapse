@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.4 (2026-11-25)
 
 - The Razer Viper V2 Pro is verified through its bundled receiver (product
   id 0x00A6): its owner confirmed DPI stages, the polling rate, idle sleep,
